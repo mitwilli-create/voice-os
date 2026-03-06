@@ -390,7 +390,7 @@ Priority 1 (upload first):
   voice_os_compact.json
 
 Priority 2 (core calibration):
-  Mitchell_Williams_Unified_Psychological_Narrative.md
+  Unified_Psychological_Narrative.md
   Social_Media_Voice_Analysis_Complete.md
   Voice_OS_Psychological_Operations.md
   Voice_OS_Anti_Patterns.md
@@ -598,7 +598,7 @@ This section consolidates internal technical details for quick reference — sys
 
 | Section | Purpose |
 |---------|---------|
-| Core Identity (Psychological Foundation) | Establishes Mitchell's Enneagram, MBTI, Big Five, VIA, and DISC profile as generation priors |
+| Core Identity (Psychological Foundation) | Establishes the owner's Enneagram, MBTI, Big Five, VIA, and DISC profile as generation priors |
 | Knowledge Base Access Table | Maps each KB document to its purpose so Claude knows when to reference it |
 | Temporal Weighting Model | Defines the 4-tier corpus system; enforces Tier 1 override rule |
 | Current Voice Calibration | Baseline dimension scores, signature phrases, banned phrases, and Tier 1 patterns |
@@ -653,11 +653,11 @@ For every request, Voice OS follows this sequence:
 | Anthropic Claude | Foundation model | All language generation | High — system prompt is Claude-specific |
 | claude.ai | Interface | Project management, KB storage | Medium — could migrate to API with effort |
 | Claude Project system | Feature | Persistent KB attachment | Low — core Claude feature |
-| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by Mitchell |
+| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by the owner |
 
 ### Status Dysregulation Pattern (Generation Constraint)
 
-Mitchell's composure challenges stem from treating professional interactions as status threats. This triggers accommodation behaviors: pre-emptive surrender, excessive apologizing, thinking out loud, credibility citation. Voice OS must NOT generate these patterns — they temporarily reduce anxiety but erode authority. Anti-patterns are documented in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
+The owner has documented specific composure anti-patterns that Voice OS must not replicate. These include accommodation behaviors that temporarily reduce anxiety but erode authority over time. Anti-patterns are documented in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
 
 ---
 
