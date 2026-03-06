@@ -62,13 +62,13 @@ Five layers, each with a specific job:
 The instruction surface. Contains the identity model, hard rules, output mode definitions, confidence scoring framework, and quality self-assessment protocol. The system prompt doesn't contain voice data — it contains the *logic* for applying it.
 
 **Layer 2 — Psychological Foundation**
-Six integrated frameworks (Enneagram, MBTI, Big Five, VIA, DISC, CliftonStrengths) converted into concrete generation rules via the Psychological Operations document. This layer answers the question: *why* does the owner communicate this way, and how should that inform generation in situations the corpus doesn't cover?
+Six integrated frameworks (Enneagram, MBTI, Big Five, VIA, DISC, CliftonStrengths) converted into concrete generation rules via the Psychological Operations document. This layer answers the question: *why* do I communicate this way, and how should that inform generation in situations the corpus doesn't cover?
 
 **Layer 3 — Knowledge Base**
 The empirical ground truth. 16 documents covering corpus metadata (6.9M+ words across email, iMessage, LinkedIn, Facebook, Instagram), extracted patterns, temporal analysis, voice evolution tracking, domain vocabulary, anti-patterns, and calibration data. The KB is the authoritative source — it supersedes any general assumptions.
 
 **Layer 4 — Temporal Weighting Model**
-A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only — never replicated. This ensures the system reflects who the owner is *now*, not who they were five years ago.
+A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only — never replicated. This ensures the system reflects who I am *now*, not who I was five years ago.
 
 **Layer 5 — Register Calibration Engine**
 Applies adjustments at generation time based on three variables: channel (email vs. chat vs. LinkedIn), audience (leadership vs. peers vs. external), and situation (error acknowledgment vs. follow-up vs. bad news). Adjustments express as deltas on baseline voice dimensions (directness, warmth, formality, structure, assertiveness, precision).
@@ -111,7 +111,7 @@ Three-dimensional adjustment matrix:
 Three distinct modes triggered by request type:
 - **Mode 1: Communication Drafting** — generates 2-3 variants (Short/Standard/Warm) with context classification, confidence score, and stated assumptions
 - **Mode 2: Slop Detection & Revision** — audits existing drafts, identifies issues with quoted text and authentic replacements, provides complete rewrite
-- **Mode 3: Register Analysis** — analyzes how the owner would approach a given communication without generating it
+- **Mode 3: Register Analysis** — analyzes how I would approach a given communication without generating it
 
 ### 8. Quality Self-Assessment Protocol
 A 10-metric Quality Transparency Report appended to all substantive responses. Metrics include Drift, Sycophancy, Answer Relevancy, Task Completion, Correctness, Hallucination Risk, Tool Correctness, Context Relevancy, Responsibility, and a Task-Specific custom metric. Scores are 1–10 with alert thresholds at 5 (🔴 concern) and 8 (🟢 meets standard).
@@ -191,7 +191,7 @@ This classification drives which register adjustments get applied. The system st
 
 ### Dimension Scoring
 
-After classification, the system computes adjusted dimension scores by applying deltas to the owner's baseline:
+After classification, the system computes adjusted dimension scores by applying deltas to my baseline:
 
 ```
 Baseline:
@@ -245,7 +245,7 @@ Scores below 0.70 trigger a clarifying question. Scores 0.70–0.89 include note
 3. Contractions are default in all but the most formal contexts.
 4. Questions create dialogue — most emails end with a question or clear next step.
 5. Format serves consumption — use structure when it helps; don't impose it on simple content.
-6. Warmth is genuine, not performative — include it because the owner actually cares.
+6. Warmth is genuine, not performative — include it because I actually care.
 7. Never invent specifics — use brackets for unknown names/dates/details.
 8. Respect the aesthetic — outputs should be elegant, not just functional.
 9. Tier 1 patterns override — always check the KB when in doubt.
@@ -291,7 +291,7 @@ to leverage our synergy and deep dive into the opportunities..."
 - Flags banned phrases: "I hope this email finds you well," "leverage," "synergy," "deep dive"
 - Identifies tone issues: generic opener, performative warmth
 - Provides issue-by-issue breakdown with authentic replacements
-- Delivers complete rewrite in owner's actual voice
+- Delivers complete rewrite in my actual voice
 - Assesses: Too corporate / Slightly off / Authentic
 
 ---
@@ -589,7 +589,7 @@ This section consolidates internal technical details for quick reference — sys
 
 | Section | Purpose |
 |---------|---------|
-| Core Identity (Psychological Foundation) | Establishes the owner's Enneagram, MBTI, Big Five, VIA, and DISC profile as generation priors |
+| Core Identity (Psychological Foundation) | Establishes my Enneagram, MBTI, Big Five, VIA, and DISC profile as generation priors |
 | Knowledge Base Access Table | Maps each KB document to its purpose so Claude knows when to reference it |
 | Temporal Weighting Model | Defines the 4-tier corpus system; enforces Tier 1 override rule |
 | Current Voice Calibration | Baseline dimension scores, signature phrases, banned phrases, and Tier 1 patterns |
@@ -644,7 +644,7 @@ For every request, Voice OS follows this sequence:
 | Anthropic Claude | Foundation model | All language generation | High — system prompt is Claude-specific |
 | claude.ai | Interface | Project management, KB storage | Medium — could migrate to API with effort |
 | Claude Project system | Feature | Persistent KB attachment | Low — core Claude feature |
-| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by the owner |
+| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by me |
 
 ### Status Dysregulation Pattern (Generation Constraint)
 
