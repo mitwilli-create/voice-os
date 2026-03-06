@@ -1,39 +1,30 @@
-# Voice OS
+# Voice OS — Architecture
 
-**A personal communication operating system grounded in 6.9M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.**
+A Claude-powered system that generates written output indistinguishable from what I'd write myself. Built on 6.9M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.
 
-> Current alignment: **~78–86%** | Target: **95%+**
+**TL;DR:** Voice OS extracts a communication fingerprint from years of my writing, structures it into a retrieval-optimized knowledge base, and pairs it with a psychological model that reasons about *why* I communicate the way I do. Current alignment: ~78-86%, targeting 95%+.
+
+> **This isn't a prompt template. It's an operating system.**
 
 ---
 
 ## Table of Contents
 
-1. [What Is Voice OS?](#what-is-voice-os)
-2. [Architecture Overview](#architecture-overview)
-3. [System Prompt Design](#system-prompt-design)
-4. [Knowledge Base](#knowledge-base)
-5. [Operational Protocol](#operational-protocol)
-6. [Use Cases](#use-cases)
-7. [Deployment](#deployment)
-8. [Roadmap](#roadmap)
-9. [Feedback & Iteration](#feedback--iteration)
-10. [Contributing](#contributing)
-
----
-
-## What Is Voice OS?
-
-Voice OS is a Claude-powered personal communication system built to generate outputs that are indistinguishable from what its owner would write themselves. Not generic professional writing. Not AI-polished corporate prose. The specific voice of one person — with all its patterns, preferences, evolution, and personality intact.
-
-The core premise: every person has a unique communication fingerprint. That fingerprint lives in the patterns of thousands of emails, messages, posts, and conversations accumulated over years. Voice OS extracts that fingerprint, structures it into a retrieval-optimized knowledge base, and pairs it with a psychological model that can reason about *why* the person communicates the way they do — enabling authentic generation even in novel situations the corpus never covered.
-
-**This is not a prompt template. It's an operating system.**
+1. [Architecture Overview](#architecture-overview)
+2. [System Prompt Design](#system-prompt-design)
+3. [Knowledge Base](#knowledge-base)
+4. [Operational Protocol](#operational-protocol)
+5. [Use Cases](#use-cases)
+6. [Deployment](#deployment)
+7. [Roadmap](#roadmap)
+8. [Feedback & Iteration](#feedback--iteration)
+9. [Contributing](#contributing)
 
 ---
 
 ## Architecture Overview
 
-Voice OS is a layered system with five distinct components:
+Five layers, each with a specific job:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -68,7 +59,7 @@ Voice OS is a layered system with five distinct components:
 ### Layer Descriptions
 
 **Layer 1 — System Prompt**
-The instruction surface. Contains the identity model, hard rules, output mode definitions, confidence scoring framework, and quality self-assessment protocol. The system prompt doesn't contain voice data — it contains the *logic* for applying voice data.
+The instruction surface. Contains the identity model, hard rules, output mode definitions, confidence scoring framework, and quality self-assessment protocol. The system prompt doesn't contain voice data — it contains the *logic* for applying it.
 
 **Layer 2 — Psychological Foundation**
 Six integrated frameworks (Enneagram, MBTI, Big Five, VIA, DISC, CliftonStrengths) converted into concrete generation rules via the Psychological Operations document. This layer answers the question: *why* does the owner communicate this way, and how should that inform generation in situations the corpus doesn't cover?
@@ -80,13 +71,13 @@ The empirical ground truth. 16 documents covering corpus metadata (6.9M+ words a
 A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only — never replicated. This ensures the system reflects who the owner is *now*, not who they were five years ago.
 
 **Layer 5 — Register Calibration Engine**
-A matrix of adjustments applied at generation time based on three variables: channel (email vs. chat vs. LinkedIn), audience (leadership vs. peers vs. external), and situation (error acknowledgment vs. follow-up vs. bad news). Adjustments are expressed as deltas on baseline voice dimensions (directness, warmth, formality, structure, assertiveness, precision).
+Applies adjustments at generation time based on three variables: channel (email vs. chat vs. LinkedIn), audience (leadership vs. peers vs. external), and situation (error acknowledgment vs. follow-up vs. bad news). Adjustments express as deltas on baseline voice dimensions (directness, warmth, formality, structure, assertiveness, precision).
 
 ---
 
 ## System Prompt Design
 
-The system prompt (v4.0) is organized into eight logical sections:
+The system prompt (v4.0) breaks into eight logical sections:
 
 ### 1. Core Identity Block
 Establishes the psychological foundation table — six frameworks, each with a direct implication for voice generation. This isn't biographical background; it's a generation constraint. The identity block answers: "When extrapolating to novel situations, reason from these traits."
@@ -188,7 +179,7 @@ The system prompt instructs explicit consultation of KB documents at generation 
 
 ### Request Classification
 
-Every incoming request is classified on three axes before generation begins:
+The system classifies every incoming request on three axes before generation begins:
 
 ```
 CHANNEL: email | chat | linkedin | text | doc | social
@@ -196,7 +187,7 @@ AUDIENCE: leadership | peer | direct-report | external | friend/family
 SITUATION: standard | follow-up | error-ack | bad-news | request | edge-case
 ```
 
-This classification drives which register adjustments are applied. The system states its classification and any assumptions before generating output — no silent decisions.
+This classification drives which register adjustments get applied. The system states its classification and assumptions before generating output — no silent decisions.
 
 ### Dimension Scoring
 
@@ -340,7 +331,7 @@ a deadline because I was dealing with a personal situation?
 
 ### LinkedIn Content
 
-**Scenario:** Thought leadership post about a recent AI project.
+**Scenario:** LinkedIn post about a recent AI project.
 
 **Voice OS handles:**
 - ~24-word avg sentence target
@@ -407,7 +398,7 @@ Priority 3 (operational tools):
 
 **Step 3: Configure System Prompt**
 
-Paste `VOICE_OS_SYSTEM_PROMPT_v4.0.md` into the Project's custom instructions field. Do not truncate — the full prompt is required for proper operation.
+Paste `VOICE_OS_SYSTEM_PROMPT_v4.0.md` into the Project's custom instructions field. Don't truncate — the full prompt is required for proper operation.
 
 **Step 4: Verify Configuration**
 
@@ -443,9 +434,9 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 
 ### Environment Notes
 
-- Voice OS does not require any API keys or external services in its base configuration
+- Voice OS doesn't require any API keys or external services in its base configuration
 - All data lives in Claude Projects knowledge base — no external database
-- Session data is not persisted between conversations (stateless per session)
+- Session data isn't persisted between conversations (stateless per session)
 - Project knowledge updates require manual re-upload when documents change
 
 ---
@@ -454,7 +445,7 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 
 ### Phase 1: Foundation Complete ✅ (~78% alignment)
 
-- Comprehensive psychological profile (6 frameworks integrated)
+- Full psychological profile (6 frameworks integrated)
 - 6.9M-word corpus metadata extracted and structured
 - Temporal tiering model (4 tiers with clear weighting)
 - Dual-persona model (Architect / Teammate)
@@ -521,19 +512,19 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 ### Known Issues
 
 **Gap 1 — No retrievable current-era samples (Critical)**
-Patterns are extracted but actual 2024-2026 email samples aren't stored in the KB. System reasons from rules only, not examples. Significant improvement expected when 50+ samples are loaded.
+I've extracted the patterns, but actual 2024-2026 email samples aren't in the KB yet. The system reasons from rules only, not examples. Loading 50+ samples should significantly improve output.
 
 **Gap 2 — Job application materials missing (Critical)**
-Cover letters and resume are referenced in the KB but not stored. Voice OS cannot reliably generate application materials without them.
+Cover letters and resume are referenced in the KB but not stored. Voice OS can't reliably generate application materials without them.
 
 **Gap 3 — Psychological insights partially operationalized (High)**
-The Psychological Operations document was added to address this. Ongoing refinement needed as edge cases surface.
+I added the Psychological Operations document to address this. Ongoing refinement needed as edge cases surface.
 
 **Gap 4 — No feedback mechanism until now (High)**
-Correction Log is initialized. First month of data collection underway.
+I've initialized the Correction Log. First month of data collection underway.
 
 **Gap 5 — Generic audience tiers only (High)**
-Recipient profiles need to be populated for key contacts to capture relationship-specific nuance.
+Recipient profiles still need populating for key contacts to capture relationship-specific nuance.
 
 ### How to Log Corrections
 
@@ -578,7 +569,7 @@ When Voice OS generates output that doesn't sound authentic, use the Correction 
 
 ## Contributing
 
-Voice OS is a personal system — its knowledge base is specific to one person and not generalizable. However, the architecture, system prompt structure, and methodological approach are designed to be adaptable.
+Voice OS is a personal system — its knowledge base is specific to one person and won't generalize. But the architecture, system prompt structure, and methodology adapt to anyone willing to do the corpus work.
 
 If you're building a similar system for yourself:
 
@@ -657,7 +648,13 @@ For every request, Voice OS follows this sequence:
 
 ### Status Dysregulation Pattern (Generation Constraint)
 
-The owner has documented specific composure anti-patterns that Voice OS must not replicate. These include accommodation behaviors that temporarily reduce anxiety but erode authority over time. Anti-patterns are documented in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
+I've documented specific composure anti-patterns that Voice OS must not replicate — accommodation behaviors that temporarily reduce anxiety but erode authority over time. Details in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
+
+---
+
+Thanks for reading. This is an ongoing project — I'm actively closing the gap between 86% and 95%.
+
+Questions? [Open an issue](https://github.com/mitchellwilliams/voice-os/issues).
 
 ---
 
