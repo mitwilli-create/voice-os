@@ -1,6 +1,6 @@
 # Voice OS
 
-**A personal communication operating system grounded in 5.8M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.**
+**A personal communication operating system grounded in 6.9M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.**
 
 > Current alignment: **~78–86%** | Target: **95%+**
 
@@ -74,7 +74,7 @@ The instruction surface. Contains the identity model, hard rules, output mode de
 Six integrated frameworks (Enneagram, MBTI, Big Five, VIA, DISC, CliftonStrengths) converted into concrete generation rules via the Psychological Operations document. This layer answers the question: *why* does the owner communicate this way, and how should that inform generation in situations the corpus doesn't cover?
 
 **Layer 3 — Knowledge Base**
-The empirical ground truth. 16 documents covering corpus metadata (5.8M+ words across email, iMessage, LinkedIn, Facebook, Instagram), extracted patterns, temporal analysis, voice evolution tracking, domain vocabulary, anti-patterns, and calibration data. The KB is the authoritative source — it supersedes any general assumptions.
+The empirical ground truth. 16 documents covering corpus metadata (6.9M+ words across email, iMessage, LinkedIn, Facebook, Instagram), extracted patterns, temporal analysis, voice evolution tracking, domain vocabulary, anti-patterns, and calibration data. The KB is the authoritative source — it supersedes any general assumptions.
 
 **Layer 4 — Temporal Weighting Model**
 A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only — never replicated. This ensures the system reflects who the owner is *now*, not who they were five years ago.
@@ -590,5 +590,76 @@ If you're building a similar system for yourself:
 
 ---
 
-*Voice OS v4.0 | Architecture: Claude Projects + Knowledge Base | Alignment target: 95%+*  
+## Technical Reference
+
+This section consolidates internal technical details for quick reference — system prompt section mapping, token budgets, generation pipeline, infrastructure dependencies, and generation constraints.
+
+### System Prompt Sections (Quick Reference)
+
+| Section | Purpose |
+|---------|---------|
+| Core Identity (Psychological Foundation) | Establishes Mitchell's Enneagram, MBTI, Big Five, VIA, and DISC profile as generation priors |
+| Knowledge Base Access Table | Maps each KB document to its purpose so Claude knows when to reference it |
+| Temporal Weighting Model | Defines the 4-tier corpus system; enforces Tier 1 override rule |
+| Current Voice Calibration | Baseline dimension scores, signature phrases, banned phrases, and Tier 1 patterns |
+| Dual-Persona Model | Defines The Architect (professional) and The Teammate (personal) modes |
+| Register Calibration by Context | Audience and channel adjustment tables |
+| Output Modes | Specifies Mode 1 (Drafting), Mode 2 (Slop Detection), Mode 3 (Register Analysis) |
+| Hard Rules | 10 non-negotiable generation constraints |
+| Confidence Scoring | Score definitions by use case; alert thresholds |
+| Quality Transparency Report | Self-assessment protocol appended to all substantive outputs |
+
+### Knowledge Base Token Estimates
+
+| Document | Estimated Tokens | When Retrieved |
+|----------|-----------------|----------------|
+| `voice_os_compact.json` | ~30K | Every generation |
+| `voice_os_complete_summary.json` | ~60K | Deep calibration only |
+| `Unified_Psychological_Narrative.md` | ~15K | Novel situations |
+| `Social_Media_Voice_Analysis_Complete.md` | ~12K | Personal register requests |
+| `Voice_OS_Domain_Vocabulary.md` | ~5K | Google/work contexts |
+| All other documents | ~5K avg | Contextually |
+
+Voice OS's full knowledge base, when retrieved simultaneously, approaches the 200K token context limit. The `compact.json` optimization reduces token usage by ~40% vs. the full summary, making it the primary reference for standard generation tasks.
+
+### Input Classification to Mode Mapping
+
+| Input Signal | Mode Triggered | KB Documents Consulted |
+|-------------|---------------|----------------------|
+| "Draft / write / compose" | Mode 1: Communication Drafting | compact.json, email samples, recipient profiles, domain vocab |
+| "This doesn't sound like me" / "fix this" / "clean this up" | Mode 2: Slop Detection & Revision | anti_patterns, compact.json, QA checklist |
+| "How would I write..." / "what register..." | Mode 3: Register Analysis | compact.json, psychological_operations |
+| Edge case signals (conflict, bad news, criticism) | Mode 1 + Emotional Calibration | emotional_calibration, psychological_operations |
+
+### 8-Step Generation Pipeline
+
+For every request, Voice OS follows this sequence:
+
+| Step | Action | Source |
+|------|--------|--------|
+| 1 | Classify input (mode, channel, audience, emotional context) | System prompt |
+| 2 | Retrieve relevant KB documents based on classification | Knowledge base |
+| 3 | Apply dimension adjustments for audience + channel | Calibration tables |
+| 4 | Apply temporal override (Tier 1 patterns take precedence) | Temporal model |
+| 5 | Generate 2-3 variants (Short / Standard / Warm) | Generation rules |
+| 6 | Apply hard rules pass (banned phrases, main-point-first, etc.) | Hard rules layer |
+| 7 | Compute confidence score | Corpus match data |
+| 8 | Append Quality Transparency Report | Self-assessment protocol |
+
+### Dependencies & Infrastructure
+
+| Dependency | Type | Role | Replacement Risk |
+|-----------|------|------|-----------------|
+| Anthropic Claude | Foundation model | All language generation | High — system prompt is Claude-specific |
+| claude.ai | Interface | Project management, KB storage | Medium — could migrate to API with effort |
+| Claude Project system | Feature | Persistent KB attachment | Low — core Claude feature |
+| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by Mitchell |
+
+### Status Dysregulation Pattern (Generation Constraint)
+
+Mitchell's composure challenges stem from treating professional interactions as status threats. This triggers accommodation behaviors: pre-emptive surrender, excessive apologizing, thinking out loud, credibility citation. Voice OS must NOT generate these patterns — they temporarily reduce anxiety but erode authority. Anti-patterns are documented in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
+
+---
+
+*Voice OS v4.0 | Architecture: Claude Projects + Knowledge Base | Alignment target: 95%+*
 *Last updated: March 2026*
