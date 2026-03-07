@@ -2,7 +2,7 @@
 
 A personal communication system built on Claude that generates output in my actual voice -- not AI-polished, not generic professional writing, mine.
 
-**TL;DR:** Voice OS drafts emails, LinkedIn posts, and messages calibrated to how I actually write. It routes between two personas, scores on six voice dimensions, and catches corporate filler before anything goes out. Built on 6.9M+ words of my own writing. [Full architecture docs](docs/ARCHITECTURE.md).
+**TL;DR:** Voice OS drafts emails, LinkedIn posts, and messages calibrated to how I actually write. It routes between two personas, scores on six voice dimensions, and catches corporate filler before anything goes out. Built on 6.9M+ words of my own writing. [Full architecture docs](docs/architecture.md).
 
 ---
 
