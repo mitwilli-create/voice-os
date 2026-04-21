@@ -1,8 +1,8 @@
 # Voice OS
 
-A personal communication system built on Claude that generates output in my actual voice -- not AI-polished, not generic professional writing, mine.
+A calibration framework for personal communication systems — architecture, scoring methodology, and eval patterns, applied to my own writing as a reference corpus.
 
-**TL;DR:** Voice OS drafts emails, LinkedIn posts, and messages calibrated to how I actually write. It routes between two personas, scores on six voice dimensions, and catches corporate filler before anything goes out. Built on 6.9M+ words of my own writing. [Full architecture docs](docs/architecture.md).
+**TL;DR:** Voice OS is a layered-KB + dimensional-scoring design for communication generation, built on Claude Projects. A 6.9M-word personal corpus grounds the calibration; the framework itself (persona routing, six-axis scoring, pre/post QA gates, temporal weighting) is the portable artifact. [Full architecture docs](docs/architecture.md).
 
 ---
 
@@ -101,24 +101,13 @@ Running live in Claude:
 
 ![Mode 2 slop detection — scoring vs. baseline](docs/images/03-mode2-slop-detection-3.png)
 
-## Example: Quality Transparency Report
+## Self-assessment protocol (not eval)
 
-Every substantive Voice OS output ends with a 10-metric self-assessment. Sample from an email-drafting run:
+Voice OS appends a 10-dimension self-check to every substantive output — Drift, Sycophancy, Answer Relevancy, Task Completion, Correctness, Hallucination Risk, Tool Correctness, Context Relevancy, Responsibility, plus a custom Voice Alignment metric. The model scores its own output 1–10 on each, with alert thresholds at <5 (concern) and ≥8 (meets standard).
 
-| Metric | Score | Note |
-|---|---|---|
-| Drift | 9/10 | Output aligns with Tier 1 patterns |
-| Sycophancy | 10/10 | No performative warmth |
-| Answer Relevancy | 9/10 | Addressed the actual ask |
-| Task Completion | 10/10 | Three variants delivered |
-| Correctness | 9/10 | No fabricated specifics |
-| Hallucination Risk | 10/10 | All claims source-grounded |
-| Tool Correctness | — | No tools used this turn |
-| Context Relevancy | 9/10 | Channel + audience detected correctly |
-| Responsibility | 10/10 | Assumptions stated |
-| Voice Alignment (custom) | 8/10 | Warmth slightly below baseline; adjusted in Warm variant |
+**This is introspection, not objective eval.** Self-scored outputs cluster toward the high end because the model that grades the output is the model that generated it. A proper eval harness would compare outputs against a held-out corpus and measure alignment via embedding similarity or pairwise human judgment. That's on the roadmap — see the Feedback & Iteration section of [`docs/architecture.md`](docs/architecture.md).
 
-Alert thresholds: < 5 = concern, ≥ 8 = meets standard.
+The self-assessment layer still does useful work: it surfaces *stated* assumptions, flags low-confidence turns, and forces the generation step to inspect its own failure modes. But no one should read a "9/10" from it as ground truth.
 
 ## Why I built this
 
