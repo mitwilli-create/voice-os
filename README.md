@@ -6,6 +6,14 @@ A personal communication system built on Claude that generates output in my actu
 
 ---
 
+## In 60 seconds
+
+- **What it does:** Claude Projects-based communication system that writes in my actual voice.
+- **How:** Six-axis scoring (Directness, Structure, Precision, Assertiveness, Warmth, Formality) + dual persona (Architect/Teammate) + temporal corpus weighting.
+- **Scale:** Calibrated on 6.9M+ words across email, LinkedIn, iMessage, and social.
+- **Status:** Active, ~78–86% alignment; target 95%+.
+- **Read next:** [architecture](docs/architecture.md).
+
 ## What it does
 
 - Drafts emails, LinkedIn posts, networking messages, and cover letters calibrated to my actual voice
@@ -45,6 +53,54 @@ Every draft runs through two checklists:
 - Lead in the first two sentences?
 - Passive voice eliminated?
 - Length appropriate to channel?
+
+## Example: slop detection in action
+
+**Input (draft submitted for review):**
+
+> Hi team — I hope this email finds you well. I wanted to quickly reach out to leverage our synergy and circle back on the deliverables from last week's ideation session. As a quick FYI, please don't hesitate to reach out if you have any questions or bandwidth issues!
+
+**Voice OS output:**
+
+*Banned phrases flagged:*
+- "hope this email finds you well" — performative opener; 0 matches in Tier 1 corpus
+- "leverage our synergy" — corporate filler; banned
+- "circle back" — banned
+- "please don't hesitate to reach out" — stock closer; banned
+
+*Tone issues:*
+- Generic opener buries the actual point (main-point-first rule violated)
+- Performative warmth reads anxious
+- Closes with a stock phrase, not a real next step
+
+*Rewrite (Standard variant):*
+
+> Quick update on last week's deliverables:
+> - [specific item 1]: shipped Monday
+> - [specific item 2]: pending input from [name]
+>
+> Anything blocking on your end?
+
+*Scoring vs. baseline:* Directness +0.31, Warmth +0.12, Formality −0.15. Confidence: 0.94.
+
+## Example: Quality Transparency Report
+
+Every substantive Voice OS output ends with a 10-metric self-assessment. Sample from an email-drafting run:
+
+| Metric | Score | Note |
+|---|---|---|
+| Drift | 9/10 | Output aligns with Tier 1 patterns |
+| Sycophancy | 10/10 | No performative warmth |
+| Answer Relevancy | 9/10 | Addressed the actual ask |
+| Task Completion | 10/10 | Three variants delivered |
+| Correctness | 9/10 | No fabricated specifics |
+| Hallucination Risk | 10/10 | All claims source-grounded |
+| Tool Correctness | — | No tools used this turn |
+| Context Relevancy | 9/10 | Channel + audience detected correctly |
+| Responsibility | 10/10 | Assumptions stated |
+| Voice Alignment (custom) | 8/10 | Warmth slightly below baseline; adjusted in Warm variant |
+
+Alert thresholds: < 5 = concern, ≥ 8 = meets standard.
 
 ## Why I built this
 
