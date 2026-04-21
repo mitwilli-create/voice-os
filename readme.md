@@ -58,4 +58,4 @@ The corpus itself -- 20+ years of personal writing -- isn't here. Neither are th
 
 Active, production. Personal use only. Current alignment: ~78-86% (target: 95%+).
 
-This was fun to build. Questions? [Open an issue](https://github.com/mitchellwilliams/voice-os/issues).
+This was fun to build. Questions? [Open an issue](https://github.com/mitwilli-create/voice-os/issues).

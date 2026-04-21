@@ -654,7 +654,7 @@ I've documented specific composure anti-patterns that Voice OS must not replicat
 
 Thanks for reading. This is an ongoing project — I'm actively closing the gap between 86% and 95%.
 
-Questions? [Open an issue](https://github.com/mitchellwilliams/voice-os/issues).
+Questions? [Open an issue](https://github.com/mitwilli-create/voice-os/issues).
 
 ---
 
