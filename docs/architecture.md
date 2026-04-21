@@ -257,14 +257,7 @@ Scores below 0.70 trigger a clarifying question. Scores 0.70–0.89 include note
 
 ### Professional Email Drafting
 
-**Scenario:** Need to send a complex project update to senior leadership with multiple stakeholders.
-
-**Input:**
-```
-Draft a project update to my VP about the RAG agent launch. 
-Hits: 10K interactions, 170 engineers using it, 2 months in.
-Context: Email, leadership audience, positive news.
-```
+**Scenario:** Complex project update to senior leadership with multiple stakeholders.
 
 **What Voice OS does:**
 - Classifies: Email / Leadership / Positive announcement
@@ -358,6 +351,8 @@ a deadline because I was dealing with a personal situation?
 ---
 
 ## Deployment
+
+> **Scope note:** Voice OS is a personal system. The steps below describe how someone would assemble their own version using their own corpus — the 16 knowledge-base files referenced here aren't in this repo, by design (they contain 20+ years of my personal writing).
 
 ### Requirements
 
