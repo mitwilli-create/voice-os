@@ -54,6 +54,16 @@ Every draft runs through two checklists:
 - Passive voice eliminated?
 - Length appropriate to channel?
 
+## Example: drafting in action
+
+Mode 1 produces three variants (Short / Standard / Warm) with an explicit classification block, applied dimension adjustments, and a confidence score.
+
+![Mode 1 drafting — classification and adjustments](docs/images/02-mode1-drafting-1.png)
+
+![Mode 1 drafting — short and standard variants](docs/images/02-mode1-drafting-2.png)
+
+![Mode 1 drafting — warm variant and confidence](docs/images/02-mode1-drafting-3.png)
+
 ## Example: slop detection in action
 
 **Input (draft submitted for review):**
@@ -82,6 +92,14 @@ Every draft runs through two checklists:
 > Anything blocking on your end?
 
 *Scoring vs. baseline:* Directness +0.31, Warmth +0.12, Formality −0.15. Confidence: 0.94.
+
+Running live in Claude:
+
+![Mode 2 slop detection — banned phrases flagged](docs/images/03-mode2-slop-detection-1.png)
+
+![Mode 2 slop detection — tone issues and rewrite](docs/images/03-mode2-slop-detection-2.png)
+
+![Mode 2 slop detection — scoring vs. baseline](docs/images/03-mode2-slop-detection-3.png)
 
 ## Example: Quality Transparency Report
 
