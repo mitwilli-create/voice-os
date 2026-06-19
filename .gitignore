@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.local
+.env.*.local
+knowledge_base/
+corpus/
+*.json
+!package.json
+*.docx
+*.xlsx
+*.pdf
+__pycache__/
+*.pyc
+*.swp
+.vscode/
+.idea/
