@@ -1,4 +1,4 @@
-# Voice OS — Architecture
+# Voice OS: Architecture
 
 A Claude-powered system that generates written output indistinguishable from what I'd write myself. Built on 6.9M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.
 
@@ -58,19 +58,19 @@ Five layers, each with a specific job:
 
 ### Layer Descriptions
 
-**Layer 1 — System Prompt**
-The instruction surface. Contains the identity model, hard rules, output mode definitions, confidence scoring framework, and quality self-assessment protocol. The system prompt doesn't contain voice data — it contains the *logic* for applying it.
+**Layer 1: System Prompt**
+The instruction surface. Contains the identity model, hard rules, output mode definitions, confidence scoring framework, and quality self-assessment protocol. The system prompt doesn't contain voice data; it contains the *logic* for applying it.
 
-**Layer 2 — Psychological Foundation**
+**Layer 2: Psychological Foundation**
 Six integrated frameworks (Enneagram, MBTI, Big Five, VIA, DISC, CliftonStrengths) converted into concrete generation rules via the Psychological Operations document. This layer answers the question: *why* do I communicate this way, and how should that inform generation in situations the corpus doesn't cover?
 
-**Layer 3 — Knowledge Base**
-The empirical ground truth. 16 documents covering corpus metadata (6.9M+ words across email, iMessage, LinkedIn, Facebook, Instagram), extracted patterns, temporal analysis, voice evolution tracking, domain vocabulary, anti-patterns, and calibration data. The KB is the authoritative source — it supersedes any general assumptions.
+**Layer 3: Knowledge Base**
+The empirical ground truth. 16 documents covering corpus metadata (6.9M+ words across email, iMessage, LinkedIn, Facebook, Instagram), extracted patterns, temporal analysis, voice evolution tracking, domain vocabulary, anti-patterns, and calibration data. The KB is the authoritative source; it supersedes any general assumptions.
 
-**Layer 4 — Temporal Weighting Model**
-A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only — never replicated. This ensures the system reflects who I am *now*, not who I was five years ago.
+**Layer 4: Temporal Weighting Model**
+A four-tier system that weights corpus data by recency. Tier 1 (most recent 2 years) is the primary voice source for generation. Tier 4 (pre-2015) is context only, never replicated. This ensures the system reflects who I am *now*, not who I was five years ago.
 
-**Layer 5 — Register Calibration Engine**
+**Layer 5: Register Calibration Engine**
 Applies adjustments at generation time based on three variables: channel (email vs. chat vs. LinkedIn), audience (leadership vs. peers vs. external), and situation (error acknowledgment vs. follow-up vs. bad news). Adjustments express as deltas on baseline voice dimensions (directness, warmth, formality, structure, assertiveness, precision).
 
 ---
@@ -80,7 +80,7 @@ Applies adjustments at generation time based on three variables: channel (email 
 The system prompt (v4.0) breaks into eight logical sections:
 
 ### 1. Core Identity Block
-Establishes the psychological foundation table — six frameworks, each with a direct implication for voice generation. This isn't biographical background; it's a generation constraint. The identity block answers: "When extrapolating to novel situations, reason from these traits."
+Establishes the psychological foundation table: six frameworks, each with a direct implication for voice generation. This isn't biographical background; it's a generation constraint. The identity block answers: "When extrapolating to novel situations, reason from these traits."
 
 ### 2. Knowledge Base Access Table
 Maps each document in the KB to its specific use case. The prompt instructs the system to *always* consult the knowledge base and explicitly states that KB patterns supersede general assumptions. Document types:
@@ -91,15 +91,15 @@ Maps each document in the KB to its specific use case. The prompt instructs the 
 - Social register calibration (`Social_Media_Voice_Analysis_Complete.md`)
 
 ### 3. Temporal Weighting Model
-A four-tier table with explicit weights and usage rules. Tier 1 = primary generation source. Tier 4 = never replicate. The prompt's critical rule: "If a pattern appears in Tier 1, use it. If it only appears in Tier 3/4, do NOT use it — that's how [the owner] used to write."
+A four-tier table with explicit weights and usage rules. Tier 1 = primary generation source. Tier 4 = never replicate. The prompt's critical rule: "If a pattern appears in Tier 1, use it. If it only appears in Tier 3/4, do NOT use it. That's how [the owner] used to write."
 
 ### 4. Voice Calibration Tables
-Six baseline dimensions with numerical scores (0.0–1.0), current pattern data drawn directly from corpus analysis, and a signature phrase library (greetings, acknowledgments, follow-ups, closings). Also includes the banned phrase list — words and phrases that are either corporate-slop or inconsistent with current voice.
+Six baseline dimensions with numerical scores (0.0–1.0), current pattern data drawn directly from corpus analysis, and a signature phrase library (greetings, acknowledgments, follow-ups, closings). Also includes the banned phrase list: words and phrases that are either corporate-slop or inconsistent with current voice.
 
 ### 5. Dual-Persona Model
 Two named modes:
-- **The Architect** — professional written voice (high structure, high precision, no "lol," no profanity)
-- **The Teammate** — personal spoken/social voice (low structure, high warmth, "lol" expected, mild profanity permitted)
+- **The Architect:** professional written voice (high structure, high precision, no "lol," no profanity)
+- **The Teammate:** personal spoken/social voice (low structure, high warmth, "lol" expected, mild profanity permitted)
 
 ### 6. Register Calibration Tables
 Three-dimensional adjustment matrix:
@@ -109,9 +109,9 @@ Three-dimensional adjustment matrix:
 
 ### 7. Output Modes
 Three distinct modes triggered by request type:
-- **Mode 1: Communication Drafting** — generates 2-3 variants (Short/Standard/Warm) with context classification, confidence score, and stated assumptions
-- **Mode 2: Slop Detection & Revision** — audits existing drafts, identifies issues with quoted text and authentic replacements, provides complete rewrite
-- **Mode 3: Register Analysis** — analyzes how I would approach a given communication without generating it
+- **Mode 1: Communication Drafting:** generates 2-3 variants (Short/Standard/Warm) with context classification, confidence score, and stated assumptions
+- **Mode 2: Slop Detection & Revision:** audits existing drafts, identifies issues with quoted text and authentic replacements, provides complete rewrite
+- **Mode 3: Register Analysis:** analyzes how I would approach a given communication without generating it
 
 ### 8. Quality Self-Assessment Protocol
 A 10-metric Quality Transparency Report appended to all substantive responses. Metrics include Drift, Sycophancy, Answer Relevancy, Task Completion, Correctness, Hallucination Risk, Tool Correctness, Context Relevancy, Responsibility, and a Task-Specific custom metric. Scores are 1–10 with alert thresholds at 5 (🔴 concern) and 8 (🟢 meets standard).
@@ -130,7 +130,7 @@ A 10-metric Quality Transparency Report appended to all substantive responses. M
 | LinkedIn Messages | 1,341 messages | 2012–2026 | 1–3 |
 | Facebook/Messenger | 134,042 items / 758K words | 2005–2020 | 3–4 |
 | Instagram DMs | 76,517 items / 326K words | 2014–2026 | 1–2 |
-| **Total** | **~6.9M words** | **2005–2026** | — |
+| **Total** | **~6.9M words** | **2005–2026** | n/a |
 
 ### Tier 1 Corpus (Primary Generation Source)
 
@@ -139,7 +139,7 @@ A 10-metric Quality Transparency Report appended to all substantive responses. M
 | Email | 843 messages | "Hi [Name]," dominant (126 vs 114 "Hey"); "Thanks," 36%; TL;DR 2.8%; bullets 67% |
 | iMessage | 231 messages | Very low structure, high warmth, "yeah" 96%+ |
 | LinkedIn Messages | 102 messages | 24-word avg; 39% exclamation; 0% emoji |
-| Instagram DMs | 12,099 items | Tier 1 social voice — most current casual register |
+| Instagram DMs | 12,099 items | Tier 1 social voice, most current casual register |
 
 ### Document Inventory (16 Files)
 
@@ -187,7 +187,7 @@ AUDIENCE: leadership | peer | direct-report | external | friend/family
 SITUATION: standard | follow-up | error-ack | bad-news | request | edge-case
 ```
 
-This classification drives which register adjustments get applied. The system states its classification and assumptions before generating output — no silent decisions.
+This classification drives which register adjustments get applied. The system states its classification and assumptions before generating output. No silent decisions.
 
 ### Dimension Scoring
 
@@ -213,9 +213,9 @@ Example: Email to senior leadership (L7+) about a missed deadline:
 
 **Mode 1 (Drafting)** generates three variants:
 
-- **Short** — Minimum viable words. For quick replies, simple confirmations, low-stakes asks.
-- **Standard** — Balanced. Typical voice. Used when context doesn't push strongly toward either end.
-- **Warm** — More relational. Appropriate when the relationship or situation calls for extra care.
+- **Short:** Minimum viable words. For quick replies, simple confirmations, low-stakes asks.
+- **Standard:** Balanced. Typical voice. Used when context doesn't push strongly toward either end.
+- **Warm:** More relational. Appropriate when the relationship or situation calls for extra care.
 
 Each variant includes:
 - Context classification (channel/audience/situation)
@@ -241,15 +241,15 @@ Scores below 0.70 trigger a clarifying question. Scores 0.70–0.89 include note
 ### Hard Rules (Non-Negotiable)
 
 1. Main point first. Always. No warming up to the topic.
-2. One clarifying question maximum — make reasonable assumptions and state them.
+2. One clarifying question maximum. Make reasonable assumptions and state them.
 3. Contractions are default in all but the most formal contexts.
-4. Questions create dialogue — most emails end with a question or clear next step.
-5. Format serves consumption — use structure when it helps; don't impose it on simple content.
-6. Warmth is genuine, not performative — include it because I actually care.
-7. Never invent specifics — use brackets for unknown names/dates/details.
-8. Respect the aesthetic — outputs should be elegant, not just functional.
-9. Tier 1 patterns override — always check the KB when in doubt.
-10. "yeah" not "yea" — the spelling shifted ~2020 and is locked.
+4. Questions create dialogue; most emails end with a question or clear next step.
+5. Format serves consumption: use structure when it helps; don't impose it on simple content.
+6. Warmth is genuine, not performative. Include it because I actually care.
+7. Never invent specifics; use brackets for unknown names/dates/details.
+8. Respect the aesthetic; outputs should be elegant, not just functional.
+9. Tier 1 patterns override; always check the KB when in doubt.
+10. "yeah" not "yea": the spelling shifted ~2020 and is locked.
 
 ---
 
@@ -263,7 +263,7 @@ Scores below 0.70 trigger a clarifying question. Scores 0.70–0.89 include note
 - Classifies: Email / Leadership / Positive announcement
 - Applies: Formality +0.20, Structure +0.10
 - Generates three variants (Short/Standard/Warm)
-- Includes TL;DR (2.8% and rising — appropriate for leadership)
+- Includes TL;DR (2.8% and rising, appropriate for leadership)
 - Uses metric-forward structure (achievement orientation, 4w3 wing 3)
 - Leads with the result, then the breakdown
 - Closes with a question or next step
@@ -272,7 +272,7 @@ Scores below 0.70 trigger a clarifying question. Scores 0.70–0.89 include note
 
 ### Slop Detection & Revision
 
-**Scenario:** Draft was written but feels off — too corporate, too AI.
+**Scenario:** Draft was written but feels off : too corporate, too AI.
 
 **Input:**
 ```
@@ -352,7 +352,7 @@ a deadline because I was dealing with a personal situation?
 
 ## Deployment
 
-> **Scope note:** Voice OS is a personal system. The steps below describe how someone would assemble their own version using their own corpus — the 16 knowledge-base files referenced here aren't in this repo, by design (they contain 20+ years of my personal writing).
+> **Scope note:** Voice OS is a personal system. The steps below describe how someone would assemble their own version using their own corpus; the 16 knowledge-base files referenced here aren't in this repo, by design (they contain 20+ years of my personal writing).
 
 ### Requirements
 
@@ -393,7 +393,7 @@ Priority 3 (operational tools):
 
 **Step 3: Configure System Prompt**
 
-Paste `VOICE_OS_SYSTEM_PROMPT_v4.0.md` into the Project's custom instructions field. Don't truncate — the full prompt is required for proper operation.
+Paste `VOICE_OS_SYSTEM_PROMPT_v4.0.md` into the Project's custom instructions field. Don't truncate; the full prompt is required for proper operation.
 
 **Step 4: Verify Configuration**
 
@@ -430,7 +430,7 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 ### Environment Notes
 
 - Voice OS doesn't require any API keys or external services in its base configuration
-- All data lives in Claude Projects knowledge base — no external database
+- All data lives in Claude Projects knowledge base, with no external database
 - Session data isn't persisted between conversations (stateless per session)
 - Project knowledge updates require manual re-upload when documents change
 
@@ -477,7 +477,7 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 
 ### Long-Term Vision
 
-**MCP Integration:** Voice OS as an MCP-native architecture — directly connected to Gmail, Google Chat, and LinkedIn for real-time draft generation without copy-paste workflows.
+**MCP Integration:** Voice OS as an MCP-native architecture, directly connected to Gmail, Google Chat, and LinkedIn for real-time draft generation without copy-paste workflows.
 
 **Evaluation Framework:** Automated alignment scoring against real sent communications. Current manual alignment estimate (~78-86%) → objective measurement via embedding similarity.
 
@@ -495,30 +495,30 @@ Voice OS performs significantly better with actual corpus samples. Before going 
 
 | Component | Score | Status |
 |-----------|-------|--------|
-| Psychological Foundation | 14/15 | Strong — not fully operationalized |
-| Corpus Coverage | 12/15 | Good — retrievable samples needed |
+| Psychological Foundation | 14/15 | Strong (not fully operationalized) |
+| Corpus Coverage | 12/15 | Good (retrievable samples needed) |
 | Pattern Analysis | 14/15 | Strong |
 | Temporal Calibration | 10/10 | Complete |
-| Register Differentiation | 8/10 | Good — specific recipient calibration missing |
-| Edge Case Handling | 3/10 | Major gap — in progress |
-| Feedback Systems | 0/10 | New — correction log just initialized |
+| Register Differentiation | 8/10 | Good (specific recipient calibration missing) |
+| Edge Case Handling | 3/10 | Major gap (in progress) |
+| Feedback Systems | 0/10 | New (correction log just initialized) |
 | Documentation Quality | 8/10 | Good |
 
 ### Known Issues
 
-**Gap 1 — No retrievable current-era samples (Critical)**
+**Gap 1: No retrievable current-era samples (Critical)**
 I've extracted the patterns, but actual 2024-2026 email samples aren't in the KB yet. The system reasons from rules only, not examples. Loading 50+ samples should significantly improve output.
 
-**Gap 2 — Job application materials missing (Critical)**
+**Gap 2: Job application materials missing (Critical)**
 Cover letters and resume are referenced in the KB but not stored. Voice OS can't reliably generate application materials without them.
 
-**Gap 3 — Psychological insights partially operationalized (High)**
+**Gap 3: Psychological insights partially operationalized (High)**
 I added the Psychological Operations document to address this. Ongoing refinement needed as edge cases surface.
 
-**Gap 4 — No feedback mechanism until now (High)**
+**Gap 4: No feedback mechanism until now (High)**
 I've initialized the Correction Log. First month of data collection underway.
 
-**Gap 5 — Generic audience tiers only (High)**
+**Gap 5: Generic audience tiers only (High)**
 Recipient profiles still need populating for key contacts to capture relationship-specific nuance.
 
 ### How to Log Corrections
@@ -526,7 +526,7 @@ Recipient profiles still need populating for key contacts to capture relationshi
 When Voice OS generates output that doesn't sound authentic, use the Correction Log template:
 
 ```markdown
-### [DATE] — [Brief Description]
+### [DATE]: [Brief Description]
 
 **Context:** [Channel, recipient, purpose]
 
@@ -564,21 +564,21 @@ When Voice OS generates output that doesn't sound authentic, use the Correction 
 
 ## Contributing
 
-Voice OS is a personal system — its knowledge base is specific to one person and won't generalize. But the architecture, system prompt structure, and methodology adapt to anyone willing to do the corpus work.
+Voice OS is a personal system; its knowledge base is specific to one person and won't generalize. But the architecture, system prompt structure, and methodology adapt to anyone willing to do the corpus work.
 
 If you're building a similar system for yourself:
 
-1. **Start with psychological frameworks** — they provide the reasoning backbone when corpus data doesn't cover a situation
-2. **Corpus size matters** — the more data, the more reliable the pattern extraction
-3. **Temporal weighting is critical** — voice evolves; old patterns actively hurt generation quality if used uncritically
-4. **Build the feedback loop early** — it's the only path to 95%+ alignment
-5. **Separate what-from-why** — knowing *what* patterns exist without knowing *why* limits extrapolation to novel situations
+1. **Start with psychological frameworks:** they provide the reasoning backbone when corpus data doesn't cover a situation
+2. **Corpus size matters:** the more data, the more reliable the pattern extraction
+3. **Temporal weighting is critical:** voice evolves; old patterns actively hurt generation quality if used uncritically
+4. **Build the feedback loop early:** it's the only path to 95%+ alignment
+5. **Separate what-from-why:** knowing *what* patterns exist without knowing *why* limits extrapolation to novel situations
 
 ---
 
 ## Technical Reference
 
-This section consolidates internal technical details for quick reference — system prompt section mapping, token budgets, generation pipeline, infrastructure dependencies, and generation constraints.
+This section consolidates internal technical details for quick reference: system prompt section mapping, token budgets, generation pipeline, infrastructure dependencies, and generation constraints.
 
 ### System Prompt Sections (Quick Reference)
 
@@ -636,18 +636,18 @@ For every request, Voice OS follows this sequence:
 
 | Dependency | Type | Role | Replacement Risk |
 |-----------|------|------|-----------------|
-| Anthropic Claude | Foundation model | All language generation | High — system prompt is Claude-specific |
-| claude.ai | Interface | Project management, KB storage | Medium — could migrate to API with effort |
-| Claude Project system | Feature | Persistent KB attachment | Low — core Claude feature |
-| 16-document Knowledge Base | Data | Voice calibration | None — built and maintained by me |
+| Anthropic Claude | Foundation model | All language generation | High (system prompt is Claude-specific) |
+| claude.ai | Interface | Project management, KB storage | Medium (could migrate to API with effort) |
+| Claude Project system | Feature | Persistent KB attachment | Low (core Claude feature) |
+| 16-document Knowledge Base | Data | Voice calibration | None (built and maintained by me) |
 
 ### Status Dysregulation Pattern (Generation Constraint)
 
-I've documented specific composure anti-patterns that Voice OS must not replicate — accommodation behaviors that temporarily reduce anxiety but erode authority over time. Details in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
+I've documented specific composure anti-patterns that Voice OS must not replicate: accommodation behaviors that temporarily reduce anxiety but erode authority over time. Details in `Voice_OS_Anti_Patterns.md` and `Voice_OS_Psychological_Operations.md`.
 
 ---
 
-Thanks for reading. This is an ongoing project — I'm actively closing the gap between 86% and 95%.
+Thanks for reading. This is an ongoing project; I'm actively closing the gap between 86% and 95%.
 
 Questions? [Open an issue](https://github.com/mitwilli-create/voice-os/issues).
 

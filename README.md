@@ -8,13 +8,13 @@ This is the engine behind the executive "Voice DNA" RAG pipeline I built for the
 
 ## What it does
 
-Ingests a voice corpus, builds a scored representation across six stylistic axes, and routes drafts through dual personas (generative + adversarial) before a QA gate decides whether output clears or cycles back. The result is drafts that sound like the person they're supposed to sound like — not a generic LLM.
+Ingests a voice corpus, builds a scored representation across six stylistic axes, and routes drafts through dual personas (generative + adversarial) before a QA gate decides whether output clears or cycles back. The result is drafts that sound like the person they're supposed to sound like, not a generic LLM.
 
 ---
 
 ## Why it matters
 
-Most "voice matching" is prompt engineering with a few examples. This is a calibrated scoring system. The six axes catch what vibes-based prompting misses: rhetorical pace, risk tolerance, sentence rhythm, escalation pattern, hedging behavior, and editorial register. The banned-phrase checklist — a curated set of rejected drafts — teaches the system what the voice refuses to do, not just what it does.
+Most "voice matching" is prompt engineering with a few examples. This is a calibrated scoring system. The six axes catch what vibes-based prompting misses: rhetorical pace, risk tolerance, sentence rhythm, escalation pattern, hedging behavior, and editorial register. The banned-phrase checklist, a curated set of rejected drafts, teaches the system what the voice refuses to do, not just what it does.
 
 ---
 
@@ -60,16 +60,16 @@ Output includes axis scores, persona deltas, QA gate decision (pass / cycle), an
 
 ## What this demonstrates
 
-- **Production RAG design** — not a demo, a system that ran at executive scale inside a large engineering organization
-- **Evaluation rigor** — quantified fidelity scoring, not vibes
-- **Agentic architecture** — multi-step pipeline with conditional routing and gate logic
-- **Domain depth** — a decade in newsrooms and eight years inside a large engineering organization built the editorial judgment that makes the scoring axes meaningful
+- **Production RAG design.** Not a demo. A system that ran at executive scale inside a large engineering organization.
+- **Evaluation rigor.** Quantified fidelity scoring, not vibes.
+- **Agentic architecture.** Multi-step pipeline with conditional routing and gate logic.
+- **Domain depth.** A decade in newsrooms and eight years inside a large engineering organization built the editorial judgment that makes the scoring axes meaningful.
 
 ---
 
 ## Status
 
-Pipeline architecture and scoring logic are documented here. Core corpus and VP-identity data are not included — that's proprietary. Sample data is synthetic but structurally representative.
+Pipeline architecture and scoring logic are documented here. Core corpus and VP-identity data are not included. That's proprietary. Sample data is synthetic but structurally representative.
 
 CI/evaluation harness: in progress.
 
@@ -77,7 +77,7 @@ CI/evaluation harness: in progress.
 
 ## Built with
 
-- Claude (Anthropic) — generation and adversarial persona
+- Claude (Anthropic): generation and adversarial persona
 - Python
 - Custom embedding + scoring layer
 
