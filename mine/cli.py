@@ -14,14 +14,33 @@ import sys
 
 from ingest.export import iter_chunk_dicts
 
+from .contrast import DEFAULT_GENERATED, DEFAULT_SEED, generate_contrast, load_contrast
+from .ngrams import load_never_ban, mine_ngram_diffs
 from .recipients import mine_recipient_deltas
 from .tone_norms import mine_context_profiles
 
-# job name -> (miner callable over a chunk iterator, output filename)
+NEVER_BAN_PATH = os.path.join("data", "never_ban.txt")
+
+# job name -> (miner callable over a chunk iterator, output filename);
+# the ngrams job also needs the contrast corpus and is dispatched specially.
 JOBS = {
     "recipients": (mine_recipient_deltas, "recipient_deltas.json"),
     "tone": (mine_context_profiles, "context_profiles.json"),
+    "ngrams": (None, "ngram_banned.json"),
 }
+
+
+def _mine_ngrams(args: argparse.Namespace) -> dict:
+    contrast_paths = args.contrast or [DEFAULT_SEED, DEFAULT_GENERATED]
+    contrast = load_contrast(contrast_paths)
+    if not contrast:
+        raise ValueError(f"no contrast passages found in {', '.join(contrast_paths)}")
+    never_ban = (
+        load_never_ban(NEVER_BAN_PATH) if os.path.exists(NEVER_BAN_PATH) else set()
+    )
+    return mine_ngram_diffs(
+        iter_chunk_dicts(args.corpus_dir), contrast, never_ban=never_ban
+    )
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -37,17 +56,25 @@ def _run(args: argparse.Namespace) -> int:
     os.makedirs(args.out, exist_ok=True)
     for job in requested:
         miner, filename = JOBS[job]
-        artifact = miner(iter_chunk_dicts(args.corpus_dir))
+        if job == "ngrams":
+            artifact = _mine_ngrams(args)
+        else:
+            artifact = miner(iter_chunk_dicts(args.corpus_dir))
         out_path = os.path.join(args.out, filename)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(artifact, f, indent=1)
         groups = {
             k: len(v)
             for k, v in artifact["data"].items()
-            if isinstance(v, dict) and k != "global"
+            if isinstance(v, (dict, list)) and k != "global"
         }
         print(f"{job}: wrote {out_path} ({groups})")
     return 0
+
+
+def _contrast_gen(args: argparse.Namespace) -> int:
+    written = generate_contrast(args.n, args.out)
+    return 0 if written else 1
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -80,7 +107,18 @@ def main(argv: list[str] | None = None) -> int:
                        f"{', '.join(JOBS)}, or all (default)")
     run_p.add_argument("--corpus-dir", default="corpus")
     run_p.add_argument("--out", default=os.path.join("corpus", "mined"))
+    run_p.add_argument("--contrast", nargs="*", default=None,
+                       help="contrast corpus paths for the ngrams job "
+                       f"(default: {DEFAULT_SEED} plus {DEFAULT_GENERATED} if present)")
     run_p.set_defaults(func=_run)
+
+    gen_p = sub.add_parser(
+        "contrast-gen",
+        help="generate a contrast corpus via Claude (live API calls)",
+    )
+    gen_p.add_argument("--n", type=int, default=300)
+    gen_p.add_argument("--out", default=DEFAULT_GENERATED)
+    gen_p.set_defaults(func=_contrast_gen)
 
     status_p = sub.add_parser("status", help="show artifact ages and sizes")
     status_p.add_argument("--out", default=os.path.join("corpus", "mined"))
