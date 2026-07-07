@@ -105,7 +105,11 @@ loads validated JSON artifacts. `mine/` may import both `voice_os` and
 
 Stored at `corpus/mined/*.json`. This path is protected three ways:
 `.gitignore` ignores `corpus/` wholesale, `*.json` is ignored except for
-explicit exemptions, and `.githooks/pre-commit` blocks staged `corpus/` paths.
+explicit exemptions, and `.githooks/pre-commit` blocks staged `corpus/`
+paths. The hook only runs in clones that have enabled it with
+`git config core.hooksPath .githooks` (already set in the primary working
+clone); fresh clones must run that command, so the gitignore rules are the
+baseline protection and the hook is defense in depth.
 
 All artifacts share one envelope:
 
@@ -136,17 +140,19 @@ Moves the banned list from hand-curated toward statistically mined evidence.
   `a = 0.5` per million.
 - Ban criteria: contrast raw count of at least 5, score of at least 2.0
   (roughly 8x), and either n of at least 2 or the unigram absent from the
-  committed `data/never_ban.txt` guard list so statistics can never ban
-  common function words.
+  `data/never_ban.txt` guard list so statistics can never ban common
+  function words. The guard list is a deliverable of the n-gram PR and is
+  not in the repository yet.
 - Output carries per-entry evidence (frequencies and log-odds) so every mined
   ban is auditable. The merged hand plus mined list flows into the existing
   gate and offline persona replacement path unchanged.
 
-Contrast corpus is pluggable, two sources:
+Contrast corpus is pluggable, two sources (both are deliverables of the
+n-gram PR; neither exists in the repository yet):
 
-1. Committed synthetic seed `data/contrast/synthetic_llm.txt`: 150 to 250
-   short passages of characteristic LLM boilerplate. Small, synthetic, what
-   tests run against.
+1. Synthetic seed `data/contrast/synthetic_llm.txt`: 150 to 250 short
+   passages of characteristic LLM boilerplate. Small, synthetic, safe to
+   commit, and what tests run against once the n-gram PR lands.
 2. Generated set `corpus/contrast/generated.jsonl` via
    `python -m mine contrast-gen --n 300`, prompting Claude through the existing
    `voice_os.llm.complete` across the channel, audience, and goal grid.
