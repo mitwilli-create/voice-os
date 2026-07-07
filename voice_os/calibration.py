@@ -15,6 +15,13 @@ from .axes import AXES, AxisProfile
 
 if TYPE_CHECKING:
     from .contexts import VoiceContext
+    from .mined import MinedArtifacts
+
+# Shrinkage: a mined group delta earns full weight as its chunk support n
+# grows past this constant (lam = n / (n + SHRINKAGE_N)); at zero data the
+# hand-seeded tables apply unchanged.
+SHRINKAGE_N = 50
+MINED_DELTA_CLIP = 0.35
 
 CHANNELS = ("email", "chat", "linkedin", "text", "doc", "social")
 AUDIENCES = ("leadership", "peer", "direct-report", "external", "friend-family", "networking", "job-seeking")
@@ -112,38 +119,85 @@ def calibrate(baseline: AxisProfile, channel: str, audience: str, situation: str
     return target
 
 
+def _blended_deltas(
+    hand: dict[str, float], profile: dict, global_mean: dict[str, float]
+) -> dict[str, float]:
+    """Shrinkage blend of a mined group profile over a hand delta table.
+
+    The mined delta is the group's tier-weighted axis mean minus the mined
+    global mean, clipped to +/- MINED_DELTA_CLIP. Blend weight
+    lam = n / (n + SHRINKAGE_N) grows with the group's chunk support.
+    """
+    n = profile.get("n_chunks", 0)
+    lam = n / (n + SHRINKAGE_N)
+    group_mean = profile["axis_mean"]
+    blended: dict[str, float] = {}
+    for axis in AXES:
+        mined_delta = group_mean[axis] - global_mean[axis]
+        mined_delta = max(-MINED_DELTA_CLIP, min(MINED_DELTA_CLIP, mined_delta))
+        blended[axis] = lam * mined_delta + (1.0 - lam) * hand.get(axis, 0.0)
+    return blended
+
+
 def calibrate_extended(
-    baseline: AxisProfile, ctx: VoiceContext
+    baseline: AxisProfile,
+    ctx: VoiceContext,
+    mined: MinedArtifacts | None = None,
 ) -> tuple[dict[str, float], dict[str, str]]:
     """Apply the full extended delta stack to the baseline mean.
 
-    Delta order: channel, medium, audience, situation, stakes, goal; each
-    step clamps to [0, 1] exactly like calibrate(). Returns (target,
-    sources) where sources records, per dimension, whether the applied
-    adjustment came from mined data or a hand-seeded heuristic table
-    ("absent" when the dimension was not supplied). Mined blending lands
-    with the mining layer; until then every supplied dimension reports
-    "heuristic".
+    Delta order: channel, medium, audience, recipient, situation, stakes,
+    goal; each step clamps to [0, 1] exactly like calibrate(). Returns
+    (target, sources) where sources records, per dimension, whether the
+    applied adjustment came from mined data or a hand-seeded heuristic
+    table ("absent" when the dimension was not supplied).
 
-    With a default VoiceContext this returns exactly what
-    calibrate(baseline, "email", "peer", "standard") returns.
+    When mined artifacts carry a supported profile for the medium,
+    audience, or goal, the mined delta blends over the hand delta by
+    shrinkage; a known recipient applies its mined delta directly.
+
+    With a default VoiceContext and no mined artifacts this returns
+    exactly what calibrate(baseline, "email", "peer", "standard") returns.
     """
+    from .mined import group_profile, recipient_profile
+
     ctx.validate()
+    context_profiles = mined.context_profiles if mined else None
+    global_mean = (context_profiles or {}).get("global", {}).get("axis_mean")
+
     target = dict(baseline.mean)
     sources: dict[str, str] = {}
-    for label, table, key in (
-        ("channel", CHANNEL_DELTAS, ctx.channel),
-        ("medium", MEDIUM_DELTAS, ctx.medium),
-        ("audience", AUDIENCE_DELTAS, ctx.audience),
-        ("situation", SITUATION_DELTAS, ctx.situation),
-        ("stakes", STAKES_DELTAS, ctx.stakes),
-        ("goal", GOAL_DELTAS, ctx.goal),
+
+    def apply(label: str, deltas: dict[str, float], source: str) -> None:
+        for axis, delta in deltas.items():
+            target[axis] = round(max(0.0, min(1.0, target[axis] + delta)), 3)
+        sources[label] = source
+
+    for label, table, key, kind in (
+        ("channel", CHANNEL_DELTAS, ctx.channel, None),
+        ("medium", MEDIUM_DELTAS, ctx.medium, "media"),
+        ("audience", AUDIENCE_DELTAS, ctx.audience, "audiences"),
+        ("recipient", None, ctx.recipient, "recipient"),
+        ("situation", SITUATION_DELTAS, ctx.situation, None),
+        ("stakes", STAKES_DELTAS, ctx.stakes, None),
+        ("goal", GOAL_DELTAS, ctx.goal, "goals"),
     ):
         if key is None:
             sources[label] = "absent"
             continue
-        for axis, delta in table.get(key, {}).items():
-            target[axis] = round(max(0.0, min(1.0, target[axis] + delta)), 3)
-        sources[label] = "heuristic"
+        if kind == "recipient":
+            profile = recipient_profile(mined.recipient_deltas if mined else None, key)
+            if profile:
+                apply(label, profile["axis_delta"], "mined")
+            else:
+                sources[label] = "absent"
+            continue
+        hand = table.get(key, {})
+        profile = group_profile(context_profiles, kind, key) if kind else None
+        if profile and global_mean:
+            apply(label, _blended_deltas(hand, profile, global_mean), "mined")
+        else:
+            apply(label, hand, "heuristic")
+
     assert set(target) == set(AXES)
     return target, sources

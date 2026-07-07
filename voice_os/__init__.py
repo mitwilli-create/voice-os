@@ -40,49 +40,22 @@ def score_draft(corpus_path: str, draft_text: str) -> dict:
     }
 
 
-def run_pipeline(
-    corpus_path: str,
+def run_cycles(
+    baseline: AxisProfile,
+    target: dict[str, float],
     draft_text: str,
-    banned_path: str | None = None,
-    channel: str = "email",
-    audience: str = "peer",
-    situation: str = "standard",
-    max_cycles: int = 2,
-    *,
-    goal: str = "unknown",
-    stakes: str = "routine",
-    medium: str | None = None,
-) -> dict:
-    """Full dual-persona pipeline with QA gate. Returns a JSON-safe dict.
+    banned: list[str],
+    max_cycles: int,
+    extra_signals: list[str] | None = None,
+    tone_profile: ToneProfile | None = None,
+) -> tuple[list[dict], GateResult, str, set[str]]:
+    """The dual-persona revision loop shared by run_pipeline and VoiceModel.
 
-    Flow: baseline -> register calibration -> score -> QA gate; on "cycle",
-    the generative persona revises, the adversarial persona stress-tests,
-    and the gate re-runs, up to max_cycles revisions.
-
-    The keyword-only goal/stakes/medium arguments engage the extended
-    calibration stack (docs/extended-model.md). With their defaults the
-    output is identical to the pre-extension pipeline.
+    Returns (cycle records, final gate result, final text, persona modes).
+    A tone profile adds advisory deviation signals via gate_extended; with
+    tone_profile=None the gate behavior is identical to gate().
     """
-    from .axes import score_text as _score
-
-    baseline = load_corpus(corpus_path)
-    banned = load_banned_list(banned_path) if banned_path else []
-
-    extended = not (goal == "unknown" and stakes == "routine" and medium is None)
-    extra_signals: list[str] = []
-    if extended:
-        ctx = VoiceContext(
-            channel=channel, audience=audience, situation=situation,
-            goal=goal, stakes=stakes, medium=medium,
-        )
-        target, _sources = calibrate_extended(baseline, ctx)
-        if goal != "unknown":
-            extra_signals.append(f"communication goal: {goal}")
-        if stakes != "routine":
-            extra_signals.append(f"stakes level: {stakes}")
-    else:
-        target = calibrate(baseline, channel, audience, situation)
-
+    extra_signals = extra_signals or []
     generative = GenerativePersona()
     adversarial = AdversarialPersona()
 
@@ -93,11 +66,16 @@ def run_pipeline(
     carried_findings: list[str] = []  # adversarial findings feed the next revision
 
     for cycle_number in range(max_cycles + 1):
-        scores = _score(text)
-        # gate_extended without tone arguments returns exactly gate();
-        # the pipeline routes through it so callers layering tone norms
-        # (the VoiceModel facade) share one gate path.
-        result = gate_extended(scores, baseline, target, find_banned(text, banned))
+        scores = score_text(text)
+        # gate_extended without tone arguments returns exactly gate(); the
+        # pipeline and the VoiceModel facade share this one gate path.
+        tone_observed = (
+            derive_metrics(tone_signals(text)) if tone_profile is not None else None
+        )
+        result = gate_extended(
+            scores, baseline, target, find_banned(text, banned),
+            tone_observed=tone_observed, tone_profile=tone_profile,
+        )
         record: dict = {
             "cycle": cycle_number,
             "axis_scores": scores,
@@ -124,6 +102,55 @@ def run_pipeline(
         cycles.append(record)
         text = revision.text
 
+    return cycles, result, text, modes
+
+
+def run_pipeline(
+    corpus_path: str,
+    draft_text: str,
+    banned_path: str | None = None,
+    channel: str = "email",
+    audience: str = "peer",
+    situation: str = "standard",
+    max_cycles: int = 2,
+    *,
+    goal: str = "unknown",
+    stakes: str = "routine",
+    medium: str | None = None,
+) -> dict:
+    """Full dual-persona pipeline with QA gate. Returns a JSON-safe dict.
+
+    Flow: baseline -> register calibration -> score -> QA gate; on "cycle",
+    the generative persona revises, the adversarial persona stress-tests,
+    and the gate re-runs, up to max_cycles revisions.
+
+    The keyword-only goal/stakes/medium arguments engage the extended
+    calibration stack (docs/extended-model.md). With their defaults the
+    output is identical to the pre-extension pipeline.
+    """
+    baseline = load_corpus(corpus_path)
+    banned = load_banned_list(banned_path) if banned_path else []
+
+    extended = not (goal == "unknown" and stakes == "routine" and medium is None)
+    extra_signals: list[str] = []
+    if extended:
+        ctx = VoiceContext(
+            channel=channel, audience=audience, situation=situation,
+            goal=goal, stakes=stakes, medium=medium,
+        )
+        target, _sources = calibrate_extended(baseline, ctx)
+        if goal != "unknown":
+            extra_signals.append(f"communication goal: {goal}")
+        if stakes != "routine":
+            extra_signals.append(f"stakes level: {stakes}")
+    else:
+        target = calibrate(baseline, channel, audience, situation)
+
+    cycles, result, text, modes = run_cycles(
+        baseline, target, draft_text, banned, max_cycles,
+        extra_signals=extra_signals,
+    )
+
     return {
         "meta": {
             "voice_os_version": __version__,
@@ -148,3 +175,7 @@ def run_pipeline(
             "output_text": text,
         },
     }
+
+
+# Imported last: model.py uses run_cycles and load_corpus defined above.
+from .model import QueryResult, VoiceModel  # noqa: E402

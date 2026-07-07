@@ -1,0 +1,58 @@
+{
+  "artifact": "context_profiles",
+  "version": "1.0",
+  "generated_at": "2026-07-07T12:00:00",
+  "miner": "mine.tone_norms@1.0",
+  "train_split": {"method": "hash_prefix_mod100", "holdout_pct": 20},
+  "tier_weights": {"1": 1.0, "2": 0.6, "3": 0.25, "4": 0.0},
+  "params": {"min_chunks": 40},
+  "data": {
+    "global": {
+      "axis_mean": {"rhetorical_pace": 0.72, "risk_tolerance": 0.68, "sentence_rhythm": 0.45, "escalation_pattern": 0.5, "hedging_behavior": 0.3, "editorial_register": 0.55},
+      "axis_std": {"rhetorical_pace": 0.1, "risk_tolerance": 0.1, "sentence_rhythm": 0.12, "escalation_pattern": 0.08, "hedging_behavior": 0.09, "editorial_register": 0.11},
+      "tone_mean": {"exclaim_per_100w": 1.2, "question_ratio": 0.25, "emoji_per_100w": 0.8, "avg_sentence_words": 11.0, "caps_ratio": 0.03},
+      "tone_std": {"exclaim_per_100w": 0.8, "question_ratio": 0.12, "emoji_per_100w": 0.6, "avg_sentence_words": 3.5, "caps_ratio": 0.012},
+      "n_chunks": 500
+    },
+    "audiences": {
+      "friend-family": {
+        "n_chunks": 200,
+        "weighted_words": 9000.0,
+        "tiers": {"1": 150, "2": 50},
+        "audience": "friend-family",
+        "medium": "dm",
+        "axis_mean": {"rhetorical_pace": 0.7, "risk_tolerance": 0.7, "sentence_rhythm": 0.4, "escalation_pattern": 0.52, "hedging_behavior": 0.24, "editorial_register": 0.3},
+        "axis_std": {"rhetorical_pace": 0.09, "risk_tolerance": 0.1, "sentence_rhythm": 0.11, "escalation_pattern": 0.08, "hedging_behavior": 0.07, "editorial_register": 0.08},
+        "tone_mean": {"exclaim_per_100w": 2.8, "question_ratio": 0.32, "emoji_per_100w": 1.9, "avg_sentence_words": 7.8, "caps_ratio": 0.024},
+        "tone_std": {"exclaim_per_100w": 1.1, "question_ratio": 0.14, "emoji_per_100w": 0.9, "avg_sentence_words": 2.2, "caps_ratio": 0.009}
+      }
+    },
+    "media": {
+      "dm": {
+        "n_chunks": 220,
+        "weighted_words": 9500.0,
+        "tiers": {"1": 160, "2": 60},
+        "audience": "friend-family",
+        "medium": "dm",
+        "axis_mean": {"rhetorical_pace": 0.71, "risk_tolerance": 0.7, "sentence_rhythm": 0.41, "escalation_pattern": 0.51, "hedging_behavior": 0.25, "editorial_register": 0.32},
+        "axis_std": {"rhetorical_pace": 0.09, "risk_tolerance": 0.1, "sentence_rhythm": 0.11, "escalation_pattern": 0.08, "hedging_behavior": 0.07, "editorial_register": 0.08},
+        "tone_mean": {"exclaim_per_100w": 2.7, "question_ratio": 0.31, "emoji_per_100w": 1.8, "avg_sentence_words": 7.9, "caps_ratio": 0.024},
+        "tone_std": {"exclaim_per_100w": 1.0, "question_ratio": 0.14, "emoji_per_100w": 0.9, "avg_sentence_words": 2.3, "caps_ratio": 0.009}
+      }
+    },
+    "goals": {},
+    "pairs": {
+      "friend-family|dm": {
+        "n_chunks": 180,
+        "weighted_words": 8000.0,
+        "tiers": {"1": 140, "2": 40},
+        "audience": "friend-family",
+        "medium": "dm",
+        "axis_mean": {"rhetorical_pace": 0.7, "risk_tolerance": 0.71, "sentence_rhythm": 0.4, "escalation_pattern": 0.52, "hedging_behavior": 0.23, "editorial_register": 0.29},
+        "axis_std": {"rhetorical_pace": 0.09, "risk_tolerance": 0.1, "sentence_rhythm": 0.11, "escalation_pattern": 0.08, "hedging_behavior": 0.07, "editorial_register": 0.08},
+        "tone_mean": {"exclaim_per_100w": 2.9, "question_ratio": 0.33, "emoji_per_100w": 2.0, "avg_sentence_words": 7.6, "caps_ratio": 0.025},
+        "tone_std": {"exclaim_per_100w": 1.1, "question_ratio": 0.15, "emoji_per_100w": 1.0, "avg_sentence_words": 2.2, "caps_ratio": 0.009}
+      }
+    }
+  }
+}
