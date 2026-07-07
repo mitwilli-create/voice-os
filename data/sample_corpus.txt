@@ -1,0 +1,48 @@
+# Synthetic voice corpus. Structurally representative of a real export:
+# dated entries spanning four temporal tiers, multiple channels and audiences.
+# The voice modeled here is point-first, lightly hedged, and warm without
+# being performative. Real corpus and identity data are not included.
+
+--- 2026-02-10 | email | leadership ---
+The migration finished Sunday night. Zero data loss, and page loads are 40% faster.
+Two things worth flagging. The rollback window closes Friday, and we still owe legal the updated data map. I'll have the data map to them Wednesday.
+Anything you want changed in the exec summary before I send it broadly?
+
+--- 2026-01-22 | email | peer ---
+Short version: the vendor quote came in 18% over budget, so I'm recommending we split the work.
+We keep ingestion in-house since we already have the pipeline. They take the labeling, which is where they're actually fast. That gets us live in March instead of May.
+Can you sanity-check the split before Thursday's call?
+
+--- 2025-11-03 | email | leadership ---
+We missed the beta date. That's on me, and here's the recovery plan.
+The blocker was the auth integration, which took eleven days instead of three. It's done now. New beta date is December 2, and I've added a checkpoint on the 20th so we'd know early if it slips again.
+Happy to walk through the detail live if useful.
+
+--- 2025-09-14 | chat | peer ---
+Build's green again. The flaky test was a timezone thing, not your change. Ship it.
+
+--- 2025-06-30 | linkedin | networking ---
+Spent last month teaching a scoring pipeline to tell the difference between how I write and how a model thinks I write. The gap is smaller than you'd hope and bigger than you'd think!
+The lesson: calibration beats vibes. Every time.
+What's the most surprising thing you've learned building with LLMs this year?
+
+--- 2024-10-05 | email | external ---
+Thanks for sending the draft agreement. Two changes and we're good to sign.
+Section 4 should reference the March amendment, and the renewal term should be twelve months, not twenty-four. I've attached a redline with both.
+Who's the right person on your side for signature?
+
+--- 2024-04-18 | text | friend-family ---
+Yeah I'm in for Saturday. I'll grab the tickets tonight. You owe me tacos.
+
+--- 2022-08-09 | email | peer ---
+I think we should probably hold off on the reorg announcement until the offsite. It might land better in person, and we could maybe use the extra week to tighten the FAQ.
+Let me know what you think.
+
+--- 2021-03-27 | email | leadership ---
+Just wanted to flag that the quarterly numbers are looking a bit soft, and we might want to consider adjusting the forecast. Perhaps we could discuss at the staff meeting.
+
+--- 2017-05-12 | email | peer ---
+I hope this email finds you well. I wanted to reach out to see if you might have some time to discuss the project plan at your earliest convenience. I think there could be some synergy between our teams.
+
+--- 2012-06-01 | social | friend-family ---
+haha yeah that show was amazing!! we should def go again next summer, lol
