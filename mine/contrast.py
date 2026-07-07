@@ -39,10 +39,17 @@ def load_contrast(paths: list[str]) -> list[str]:
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line:
-                        text = json.loads(line).get("text", "")
-                        if text.strip():
-                            passages.append(text.strip())
+                    if not line:
+                        continue
+                    # Skip malformed lines: a truncated generated file must
+                    # not break mining while the seed corpus is present.
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    text = entry.get("text", "") if isinstance(entry, dict) else ""
+                    if text.strip():
+                        passages.append(text.strip())
         else:
             with open(path, encoding="utf-8") as f:
                 block: list[str] = []

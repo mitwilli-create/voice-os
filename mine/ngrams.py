@@ -33,14 +33,24 @@ _TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)*")
 
 
 def tokenize(text: str) -> list[str]:
-    """Lowercase word tokens, internal apostrophes kept."""
-    return _TOKEN.findall(text.lower())
+    """Lowercase word tokens, internal apostrophes kept.
+
+    Curly apostrophes normalize to ASCII first so contractions tokenize
+    identically across sources and match the never-ban guard entries.
+    """
+    return _TOKEN.findall(text.replace("’", "'").lower())
 
 
 def _count_ngrams(
-    token_lists: Iterable[tuple[list[str], float]], n_max: int
+    token_lists: Iterable[tuple[list[str], float]],
+    n_max: int,
+    only: set[str] | None = None,
 ) -> tuple[dict[str, float], float]:
-    """Weighted n-gram counts and the weighted token total."""
+    """Weighted n-gram counts and the weighted token total.
+
+    With `only`, counting is restricted to that candidate set, so a large
+    corpus never materializes millions of n-gram keys.
+    """
     counts: dict[str, float] = {}
     total_tokens = 0.0
     for tokens, weight in token_lists:
@@ -48,6 +58,8 @@ def _count_ngrams(
         for n in range(1, n_max + 1):
             for i in range(len(tokens) - n + 1):
                 gram = " ".join(tokens[i : i + n])
+                if only is not None and gram not in only:
+                    continue
                 counts[gram] = counts.get(gram, 0.0) + weight
     return counts, total_tokens
 
@@ -78,6 +90,17 @@ def mine_ngram_diffs(
         raise ValueError("contrast corpus is empty; nothing to diff against")
     never_ban = never_ban or set()
 
+    # Count the (small) contrast corpus in full first; the (large) self
+    # corpus is then counted against those candidate grams alone, keeping
+    # memory bounded by the contrast vocabulary.
+    contrast_counts, contrast_tokens = _count_ngrams(
+        ((tokenize(text), 1.0) for text in contrast_texts), n_max
+    )
+    if contrast_tokens <= 0:
+        raise ValueError("contrast corpus has no tokens")
+    candidates = {
+        gram for gram, count in contrast_counts.items() if count >= min_contrast_count
+    }
     self_counts, self_tokens = _count_ngrams(
         (
             (tokenize(chunk["text"]), chunk_weight(chunk))
@@ -85,14 +108,10 @@ def mine_ngram_diffs(
             if is_train(chunk, holdout_pct) and chunk_weight(chunk) > 0
         ),
         n_max,
-    )
-    contrast_counts, contrast_tokens = _count_ngrams(
-        ((tokenize(text), 1.0) for text in contrast_texts), n_max
+        only=candidates,
     )
     if self_tokens <= 0:
         raise ValueError("no weighted train-split self tokens; run ingestion first")
-    if contrast_tokens <= 0:
-        raise ValueError("contrast corpus has no tokens")
 
     banned = []
     for gram, raw_count in contrast_counts.items():

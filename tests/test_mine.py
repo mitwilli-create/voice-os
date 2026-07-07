@@ -324,3 +324,34 @@ def test_cli_ngrams_job(tmp_path):
     ])
     assert code == 0
     assert (out / "ngram_banned.json").exists()
+
+
+def test_tokenize_normalizes_curly_apostrophes():
+    assert tokenize("Don’t let’s") == ["don't", "let's"]
+
+
+def test_curly_apostrophe_contractions_hit_never_ban_guard():
+    self_chunks = corpus_of(50, hint="curly friend")
+    contrast = contrast_of(10, "don’t don’t don’t don’t don’t don’t")
+    artifact = mine_ngram_diffs(self_chunks, contrast, never_ban={"don't"})
+    assert "don't" not in [e["ngram"] for e in artifact["data"]["banned"]]
+
+
+def test_load_contrast_skips_malformed_jsonl_lines(tmp_path):
+    jl = tmp_path / "generated.jsonl"
+    jl.write_text('{"text": "good passage"}\n{truncated garbage\n"bare string"\n')
+    assert load_contrast([str(jl)]) == ["good passage"]
+
+
+def test_self_counting_restricted_to_contrast_candidates():
+    from mine.ngrams import _count_ngrams
+
+    contrast_counts, _ = _count_ngrams([(tokenize(SLOP), 1.0)] * 10, 4)
+    candidates = {g for g, c in contrast_counts.items() if c >= 5}
+    self_counts, total = _count_ngrams(
+        [(tokenize("a completely different self text with delve inside"), 1.0)],
+        4,
+        only=candidates,
+    )
+    assert total > 0
+    assert set(self_counts) <= candidates
