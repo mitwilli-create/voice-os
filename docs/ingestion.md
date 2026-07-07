@@ -80,10 +80,11 @@ Each line of `corpus/chunks/<source>.jsonl` is one chunk:
 
 ## Privacy
 
-Local-first: adapters read raw exports in place; nothing personal is copied
-into the repo. Three layers keep corpus data out of git:
+Local-first: adapters read raw exports in place; nothing personal is
+committed. Three layers keep corpus data out of git:
 
-1. `.gitignore` blocks `corpus/`, `*.jsonl`, `*.mbox`, `ingest.local.json`
+1. `.gitignore` blocks `corpus/`, `sources/`, `*.jsonl`, `*.mbox`,
+   `ingest.local.json`
 2. `.githooks/pre-commit` hard-fails on those paths and on any staged file
    over 1MB (enable with `git config core.hooksPath .githooks`)
 3. Test fixtures are synthetic (a fictional "Test Person"); no real data
@@ -91,3 +92,8 @@ into the repo. Three layers keep corpus data out of git:
 
 `ingest.local.json` holds machine-specific paths and identity aliases and
 never enters git; `ingest.example.json` is the committed template.
+
+A gitignored `sources/` directory inside the working copy is the suggested
+home for raw export copies (social exports, mbox, message exports, scripts,
+transcripts): the whole system lives in one folder while the ignore rules
+and hook keep every byte of it out of git.
