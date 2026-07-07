@@ -18,4 +18,11 @@ def is_holdout(chunk_hash: str, pct: int = 20) -> bool:
         raise ValueError(f"holdout pct must be 0..100, got {pct}")
     if len(chunk_hash) < 8:
         raise ValueError(f"chunk hash too short: '{chunk_hash}'")
-    return int(chunk_hash[:8], 16) % 100 < pct
+    prefix = chunk_hash[:8]
+    try:
+        bucket = int(prefix, 16)
+    except ValueError:
+        raise ValueError(
+            f"chunk hash prefix is not hex: '{prefix}' (expected a SHA256 hex digest)"
+        ) from None
+    return bucket % 100 < pct

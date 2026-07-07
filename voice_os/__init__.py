@@ -94,7 +94,10 @@ def run_pipeline(
 
     for cycle_number in range(max_cycles + 1):
         scores = _score(text)
-        result = gate(scores, baseline, target, find_banned(text, banned))
+        # gate_extended without tone arguments returns exactly gate();
+        # the pipeline routes through it so callers layering tone norms
+        # (the VoiceModel facade) share one gate path.
+        result = gate_extended(scores, baseline, target, find_banned(text, banned))
         record: dict = {
             "cycle": cycle_number,
             "axis_scores": scores,

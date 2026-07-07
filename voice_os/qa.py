@@ -108,5 +108,12 @@ def gate_extended(
     """
     result = gate(scores, baseline, target, banned_hits, threshold)
     if tone_observed is not None and tone_profile is not None:
+        from .tone import derive_metrics
+
+        # Accept either normalized TONE_METRICS or a raw tone_signals()
+        # dict (chunk-schema keys). The raw shape lacks emoji_per_100w,
+        # so normalize exactly when that key is missing.
+        if "emoji_per_100w" not in tone_observed:
+            tone_observed = derive_metrics(tone_observed)
         result.revision_signals.extend(tone_profile.deviations(tone_observed))
     return result
