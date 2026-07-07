@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .axes import AxisProfile
+
+if TYPE_CHECKING:
+    from .tone import ToneProfile
 
 PASS_THRESHOLD = 0.80
 
@@ -83,3 +87,33 @@ def gate(
         banned_hits=banned_hits,
         revision_signals=signals,
     )
+
+
+def gate_extended(
+    scores: dict[str, float],
+    baseline: AxisProfile,
+    target: dict[str, float],
+    banned_hits: list[str],
+    tone_observed: dict[str, float] | None = None,
+    tone_profile: ToneProfile | None = None,
+    threshold: float = PASS_THRESHOLD,
+) -> GateResult:
+    """gate() plus advisory tone deviation signals.
+
+    Tone is advisory-only in v1: deviations are appended to
+    revision_signals for the generative persona to act on, but never flip
+    the pass/cycle decision. Promotion to a blocking check waits for
+    evaluation evidence that mined tone norms are tight enough
+    (docs/extended-model.md).
+    """
+    result = gate(scores, baseline, target, banned_hits, threshold)
+    if tone_observed is not None and tone_profile is not None:
+        from .tone import derive_metrics
+
+        # Accept either normalized TONE_METRICS or a raw tone_signals()
+        # dict (chunk-schema keys). The raw shape lacks emoji_per_100w,
+        # so normalize exactly when that key is missing.
+        if "emoji_per_100w" not in tone_observed:
+            tone_observed = derive_metrics(tone_observed)
+        result.revision_signals.extend(tone_profile.deviations(tone_observed))
+    return result

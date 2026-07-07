@@ -9,9 +9,8 @@ a later model-based pass can retag without re-ingesting.
 
 from __future__ import annotations
 
-import re
-
 from voice_os.calibration import AUDIENCES, CHANNELS
+from voice_os.tone import tone_signals
 
 from .schema import Context
 
@@ -55,12 +54,6 @@ PERSONAL_EMAIL_DOMAINS = {
     "msn.com", "protonmail.com",
 }
 
-_SENTENCE_SPLIT = re.compile(r"[.!?]+(?:\s|$)")
-_EMOJI = re.compile(
-    "[\U0001F300-\U0001FAFF☀-➿\U0001F1E6-\U0001F1FF]"
-)
-
-
 def infer_channel(source_type: str) -> str:
     channel = CHANNEL_BY_SOURCE.get(source_type, "doc")
     assert channel in CHANNELS
@@ -87,23 +80,6 @@ def infer_audience(source_type: str, relationship_hint: str = "") -> str:
         audience = "peer"
     assert audience in AUDIENCES
     return audience
-
-
-def tone_signals(text: str) -> dict:
-    words = text.split()
-    n_words = max(len(words), 1)
-    sentences = [s for s in _SENTENCE_SPLIT.split(text) if s.strip()]
-    n_sentences = max(len(sentences), 1)
-    letters = [c for c in text if c.isalpha()]
-    upper = sum(1 for c in letters if c.isupper())
-    return {
-        "exclaim_per_100w": round(text.count("!") * 100 / n_words, 2),
-        "question_ratio": round(text.count("?") / n_sentences, 2),
-        "emoji_count": len(_EMOJI.findall(text)),
-        "avg_sentence_words": round(n_words / n_sentences, 1),
-        "caps_ratio": round(upper / max(len(letters), 1), 3),
-        "word_count": len(words),
-    }
 
 
 def infer_goal(text: str, channel: str, signals: dict) -> str:
