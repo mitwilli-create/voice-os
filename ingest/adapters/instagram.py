@@ -64,6 +64,10 @@ class InstagramAdapter(SourceAdapter):
             yield from self._messages(base_path, export_id)
 
     def _content_files(self, base_path: Path, pattern: str) -> list[Path]:
+        # Dedup on the as-discovered path, never on .resolve(): resolving a
+        # file inside a symlinked subdirectory escapes base_path and breaks
+        # relative_to(). Files reachable twice through symlinks are
+        # collapsed downstream by content-hash dedup anyway.
         seen: dict[Path, None] = {}
         for candidate in (
             base_path / "content",
@@ -72,11 +76,18 @@ class InstagramAdapter(SourceAdapter):
         ):
             if candidate.exists():
                 for f in sorted(candidate.glob(pattern)):
-                    seen[f.resolve()] = None
+                    seen[f] = None
         for f in sorted(base_path.rglob(pattern)):
             if "content" in f.parts or "posts" in f.parts:
-                seen[f.resolve()] = None
+                seen[f] = None
         return list(seen)
+
+    @staticmethod
+    def _origin(json_file: Path, base_path: Path) -> str:
+        try:
+            return str(json_file.relative_to(base_path))
+        except ValueError:
+            return str(json_file)
 
     def _captions(
         self, base_path: Path, export_id: str, pattern: str, source_type: str, list_key: str
@@ -93,7 +104,7 @@ class InstagramAdapter(SourceAdapter):
                 yield RawRecord(
                     text=caption,
                     source_type=source_type,
-                    origin_file=str(json_file.relative_to(base_path)),
+                    origin_file=self._origin(json_file, base_path),
                     export_id=export_id,
                     timestamp=s_to_iso(ts),
                 )
@@ -101,7 +112,7 @@ class InstagramAdapter(SourceAdapter):
     def _comments(self, base_path: Path, export_id: str) -> Iterator[RawRecord]:
         seen: dict[Path, None] = {}
         for f in sorted(base_path.rglob("*comment*.json")):
-            seen[f.resolve()] = None
+            seen[f] = None
         for json_file in seen:
             data = _load_json(json_file)
             if not data:
@@ -131,7 +142,7 @@ class InstagramAdapter(SourceAdapter):
                 yield RawRecord(
                     text=content,
                     source_type="ig_comment",
-                    origin_file=str(json_file.relative_to(base_path)),
+                    origin_file=self._origin(json_file, base_path),
                     export_id=export_id,
                     timestamp=s_to_iso(ts),
                 )
@@ -167,7 +178,7 @@ class InstagramAdapter(SourceAdapter):
                         yield RawRecord(
                             text=content,
                             source_type="instagram_dm",
-                            origin_file=str(json_file.relative_to(base_path)),
+                            origin_file=self._origin(json_file, base_path),
                             export_id=export_id,
                             timestamp=ms_to_iso(msg.get("timestamp_ms")),
                             relationship_hint=conv_folder.name,

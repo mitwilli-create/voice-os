@@ -302,3 +302,24 @@ def test_split_paragraph_chunks_bounds_oversized_paragraph():
     chunks = split_paragraph_chunks(huge, max_words=400)
     assert all(len(c.split()) <= 400 for c in chunks)
     assert sum(len(c.split()) for c in chunks) == 950
+
+
+def test_instagram_adapter_survives_symlinked_subdirectory(tmp_path):
+    """Qodo round 2: a symlinked directory inside the export must not
+    crash origin_file computation or lose records."""
+    real = tmp_path / "elsewhere" / "content"
+    real.mkdir(parents=True)
+    (real / "posts_1.json").write_text(
+        '[{"media": [{"title": "Caption living behind a symlink", '
+        '"creation_timestamp": 1600000000}]}]',
+        encoding="utf-8",
+    )
+    export = tmp_path / "export" / "your_instagram_activity"
+    export.mkdir(parents=True)
+    (export / "content").symlink_to(real, target_is_directory=True)
+
+    config = make_config(tmp_path, instagram={"paths": [str(tmp_path / "export")]})
+    records = list(InstagramAdapter(config).iter_records())
+    assert len(records) == 1
+    assert "symlink" in records[0].text
+    assert records[0].origin_file
