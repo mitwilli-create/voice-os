@@ -200,3 +200,127 @@ def test_cli_run_writes_artifacts(tmp_path):
     assert mine_main(["status", "--out", str(out)]) == 0
     assert mine_main(["run", "--job", "bogus", "--corpus-dir",
                       str(tmp_path / "corpus"), "--out", str(out)]) == 2
+
+
+# --- n-gram anti-pattern mining -------------------------------------------
+
+from mine.contrast import generate_contrast, load_contrast  # noqa: E402
+from mine.ngrams import load_never_ban, mine_ngram_diffs, tokenize  # noqa: E402
+
+SLOP = (
+    "I hope this finds you well. Let's delve into the exciting updates and "
+    "circle back on the synergies we discussed."
+)
+
+
+def contrast_of(n: int, text: str = SLOP) -> list[str]:
+    return [text for _ in range(n)]
+
+
+def test_tokenize_keeps_internal_apostrophes():
+    assert tokenize("Let's ship it, don't wait!") == [
+        "let's", "ship", "it", "don't", "wait",
+    ]
+
+
+def test_planted_slop_phrase_gets_banned():
+    self_chunks = corpus_of(50, hint="ngram friend")
+    artifact = mine_ngram_diffs(self_chunks, contrast_of(10))
+    banned_phrases = [e["ngram"] for e in artifact["data"]["banned"]]
+    assert any("delve" in p for p in banned_phrases)
+    for entry in artifact["data"]["banned"]:
+        assert entry["log_odds"] >= 2.0
+        assert entry["contrast_count"] >= 5
+
+
+def test_never_ban_guard_protects_unigrams():
+    self_chunks = corpus_of(50, hint="guard friend")
+    contrast = contrast_of(10, "well well well well well well")
+    with_guard = mine_ngram_diffs(self_chunks, contrast, never_ban={"well"})
+    unigrams = [e["ngram"] for e in with_guard["data"]["banned"] if e["n"] == 1]
+    assert "well" not in unigrams
+
+
+def test_self_corpus_phrases_not_banned():
+    # A phrase common in BOTH corpora has low log odds and stays allowed.
+    phrase = "see you soon"
+    self_chunks = corpus_of(50, hint="both friend")  # corpus_of text ends "see you soon!"
+    artifact = mine_ngram_diffs(self_chunks, contrast_of(10, phrase))
+    banned_phrases = [e["ngram"] for e in artifact["data"]["banned"]]
+    assert phrase not in banned_phrases
+
+
+def test_subgrams_of_banned_phrases_are_suppressed():
+    self_chunks = corpus_of(50, hint="dedup friend")
+    artifact = mine_ngram_diffs(self_chunks, contrast_of(10))
+    phrases = [e["ngram"] for e in artifact["data"]["banned"]]
+    padded = [f" {p} " for p in phrases]
+    for p in phrases:
+        containers = [q for q in padded if f" {p} " in q and q.strip() != p]
+        assert not containers, f"'{p}' is a sub-gram of a kept phrase"
+
+
+def test_empty_contrast_fails_fast():
+    try:
+        mine_ngram_diffs(corpus_of(10), [])
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+
+
+def test_load_contrast_parses_txt_and_jsonl(tmp_path):
+    txt = tmp_path / "seed.txt"
+    txt.write_text("# comment line\nfirst passage line one\nline two\n\nsecond passage\n")
+    jl = tmp_path / "generated.jsonl"
+    jl.write_text('{"text": "third passage"}\n\n{"text": ""}\n')
+    passages = load_contrast([str(txt), str(jl), str(tmp_path / "missing.txt")])
+    assert passages == [
+        "first passage line one line two", "second passage", "third passage",
+    ]
+
+
+def test_load_never_ban(tmp_path):
+    guard = tmp_path / "never_ban.txt"
+    guard.write_text("# guard\nthe\nAnd\n\nwell\n")
+    assert load_never_ban(str(guard)) == {"the", "and", "well"}
+
+
+def test_contrast_gen_refuses_offline(tmp_path):
+    # The whole test module sets VOICE_OS_OFFLINE=1.
+    try:
+        generate_contrast(1, str(tmp_path / "gen.jsonl"))
+        raised = False
+    except RuntimeError:
+        raised = True
+    assert raised
+
+
+def test_ngram_artifact_round_trips_through_loader(tmp_path):
+    artifact = mine_ngram_diffs(corpus_of(50, hint="rt friend"), contrast_of(10))
+    mined_dir = tmp_path / "mined"
+    mined_dir.mkdir()
+    (mined_dir / "ngram_banned.json").write_text(json.dumps(artifact))
+    loaded = load_artifacts(str(mined_dir))
+    assert loaded.ngram_banned
+    assert all(isinstance(p, str) for p in loaded.ngram_banned)
+
+
+def test_cli_ngrams_job(tmp_path):
+    chunks_dir = tmp_path / "corpus" / "chunks"
+    chunks_dir.mkdir(parents=True)
+    with open(chunks_dir / "synthetic.jsonl", "w") as f:
+        for chunk in corpus_of(50, hint="cli ngram friend"):
+            f.write(json.dumps(chunk) + "\n")
+    seed = tmp_path / "seed.txt"
+    seed.write_text("\n\n".join(contrast_of(10)))
+
+    out = tmp_path / "corpus" / "mined"
+    code = mine_main([
+        "run", "--job", "ngrams",
+        "--corpus-dir", str(tmp_path / "corpus"),
+        "--out", str(out),
+        "--contrast", str(seed),
+    ])
+    assert code == 0
+    assert (out / "ngram_banned.json").exists()
