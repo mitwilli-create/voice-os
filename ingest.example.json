@@ -1,0 +1,35 @@
+{
+  "identity": {
+    "names": ["Your Name"],
+    "usernames": ["your_handle"],
+    "emails": ["you@example.com"],
+    "phone_numbers": []
+  },
+  "sources": {
+    "instagram": {
+      "paths": ["~/Downloads/instagram-export"]
+    },
+    "facebook": {
+      "paths": ["~/Downloads/facebook-export"]
+    },
+    "email": {
+      "mbox_paths": ["~/Downloads/All mail Including Spam and Trash.mbox"]
+    },
+    "messages": {
+      "combined_sent_paths": [],
+      "imessage_paths": []
+    },
+    "documents": {
+      "dirs": [],
+      "extensions": [".txt", ".md", ".docx"],
+      "max_chunk_words": 400
+    },
+    "video": {
+      "transcript_paths": []
+    }
+  },
+  "corpus_dir": "corpus",
+  "export": {
+    "min_words": 8
+  }
+}

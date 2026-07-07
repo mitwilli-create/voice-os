@@ -15,3 +15,12 @@ __pycache__/
 .vscode/
 .idea/
 output/
+
+# ingest privacy layer: raw corpus and machine-local config never enter git
+ingest.local.json
+*.jsonl
+*.mbox
+output/
+!ingest.example.json
+!tests/fixtures/**/*.json
+sources/

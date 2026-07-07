@@ -1,0 +1,17 @@
+========================================
+FILE: msg_00001.eml
+SUBJECT: Re: Sunday plans
+DATE: Fri, 12 Jun 2015 09:33:32 -0400
+----------------------------------------
+Let me see if I can swing Sunday. If not we can shoot for five today.
+
+Sent from my iPhone
+
+> On Jun 12, 2015, at 09:31, Somebody <somebody@example.com> wrote:
+> quoted text that must not survive extraction
+========================================
+FILE: msg_00002.eml
+SUBJECT: notes
+DATE: Mon, 03 Feb 2025 10:00:00 -0800
+----------------------------------------
+Second message body with enough words to pass the export filter easily.

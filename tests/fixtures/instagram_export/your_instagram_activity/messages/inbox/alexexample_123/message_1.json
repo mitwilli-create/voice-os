@@ -1,0 +1,9 @@
+{
+  "participants": [{"name": "Test Person"}, {"name": "Alex Example"}],
+  "messages": [
+    {"sender_name": "Test Person", "timestamp_ms": 1750000000000, "content": "Meet at the cafÃ© at nine? I found a table by the window for us"},
+    {"sender_name": "Alex Example", "timestamp_ms": 1750000001000, "content": "This one is not authored by the test identity"},
+    {"sender_name": "Test Person", "timestamp_ms": 1750000002000, "content": "Test Person shared a story."},
+    {"sender_name": "Test Person", "timestamp_ms": 1750000003000, "content": "Liked a message"}
+  ]
+}
