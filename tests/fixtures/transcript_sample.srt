@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:00:04,000
+Good evening, I'm Test Person, and tonight we begin with a story
+
+2
+00:00:04,000 --> 00:01:00,000
+about a community coming together after the storm swept through town.

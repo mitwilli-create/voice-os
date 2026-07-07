@@ -1,0 +1,8 @@
+{
+  "participants": [{"name": "Test Person"}, {"name": "Old Friend"}],
+  "messages": [
+    {"sender_name": "Test Person", "timestamp_ms": 1300000000000, "content": "Throwback message from the early days of the platform"},
+    {"sender_name": "Old Friend", "timestamp_ms": 1300000001000, "content": "Not authored by the test identity"},
+    {"sender_name": "Test Person", "timestamp_ms": 1300000002000, "content": "Test Person sent an attachment."}
+  ]
+}

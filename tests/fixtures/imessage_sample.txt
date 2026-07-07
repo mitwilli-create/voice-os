@@ -1,0 +1,4 @@
+[2022-09-14 12:10:55] +15550001111: First message from the test identity
+and a continuation line that belongs to it
+[2022-09-14 12:14:40] +15559998888: from someone else entirely, must be skipped
+[2022-09-14 12:16:34] +15550001111: Second message from the test identity

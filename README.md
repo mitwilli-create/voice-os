@@ -57,6 +57,7 @@ Output includes axis scores, the register-calibrated target profile, QA gate dec
 
 | Layer | Function | Module |
 |---|---|---|
+| Source ingestion | Extracts, deduplicates, and provenance-tags local data exports; renders the scoring corpus. Incremental by design. See [docs/ingestion.md](docs/ingestion.md) | `ingest/` |
 | Corpus ingestion | Parses dated corpus entries; builds a temporal-tier-weighted axis baseline | `voice_os/corpus.py` |
 | Six-axis scorer | Evaluates drafts against the baseline across six stylistic axes | `voice_os/axes.py` |
 | Register calibration | Channel x audience x situation deltas produce the generation target | `voice_os/calibration.py` |
@@ -89,7 +90,7 @@ Every stage has a deterministic offline implementation, so scoring and gating ar
 
 **Privacy note:** in live mode the draft text, target profile, banned phrases, and revision signals are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Corpus text itself is never sent; only its computed axis profile is.
 
-Tests: `python -m unittest discover -s tests -v` (offline, no API key needed).
+Tests: `python -m pytest tests/` runs the full suite, scoring plus ingestion (offline, no API key needed). The core scoring tests also run dependency-free via `python -m unittest discover -s tests -v`.
 
 CI/evaluation harness: in progress.
 
