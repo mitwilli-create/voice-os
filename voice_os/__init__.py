@@ -11,12 +11,15 @@ credentials resolve (see voice_os.llm).
 from __future__ import annotations
 
 from .axes import AXES, AxisProfile, score_text
-from .calibration import calibrate
+from .calibration import calibrate, calibrate_extended
+from .contexts import GOALS, MEDIA, STAKES, VoiceContext, infer_stakes
 from .corpus import CorpusEntry, build_baseline, parse_corpus
+from .holdout import is_holdout
 from .personas import AdversarialPersona, GenerativePersona
-from .qa import GateResult, find_banned, gate, load_banned_list
+from .qa import GateResult, find_banned, gate, gate_extended, load_banned_list
+from .tone import TONE_METRICS, ToneProfile, derive_metrics, tone_signals
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def load_corpus(path: str) -> AxisProfile:
@@ -45,18 +48,40 @@ def run_pipeline(
     audience: str = "peer",
     situation: str = "standard",
     max_cycles: int = 2,
+    *,
+    goal: str = "unknown",
+    stakes: str = "routine",
+    medium: str | None = None,
 ) -> dict:
     """Full dual-persona pipeline with QA gate. Returns a JSON-safe dict.
 
     Flow: baseline -> register calibration -> score -> QA gate; on "cycle",
     the generative persona revises, the adversarial persona stress-tests,
     and the gate re-runs, up to max_cycles revisions.
+
+    The keyword-only goal/stakes/medium arguments engage the extended
+    calibration stack (docs/extended-model.md). With their defaults the
+    output is identical to the pre-extension pipeline.
     """
     from .axes import score_text as _score
 
     baseline = load_corpus(corpus_path)
     banned = load_banned_list(banned_path) if banned_path else []
-    target = calibrate(baseline, channel, audience, situation)
+
+    extended = not (goal == "unknown" and stakes == "routine" and medium is None)
+    extra_signals: list[str] = []
+    if extended:
+        ctx = VoiceContext(
+            channel=channel, audience=audience, situation=situation,
+            goal=goal, stakes=stakes, medium=medium,
+        )
+        target, _sources = calibrate_extended(baseline, ctx)
+        if goal != "unknown":
+            extra_signals.append(f"communication goal: {goal}")
+        if stakes != "routine":
+            extra_signals.append(f"stakes level: {stakes}")
+    else:
+        target = calibrate(baseline, channel, audience, situation)
 
     generative = GenerativePersona()
     adversarial = AdversarialPersona()
@@ -84,7 +109,7 @@ def run_pipeline(
             cycles.append(record)
             break
 
-        signals = result.revision_signals + [
+        signals = result.revision_signals + extra_signals + [
             f"adversarial finding (previous cycle): {f}" for f in carried_findings
         ]
         revision = generative.revise(text, target, banned, signals)
@@ -106,6 +131,10 @@ def run_pipeline(
             "channel": channel,
             "audience": audience,
             "situation": situation,
+            # Extended keys appear only when the extended stack is engaged,
+            # keeping default-argument output identical to the pre-extension
+            # pipeline.
+            **({"goal": goal, "stakes": stakes, "medium": medium} if extended else {}),
         },
         "baseline": {"mean": baseline.mean, "std": baseline.std},
         "target_profile": target,
