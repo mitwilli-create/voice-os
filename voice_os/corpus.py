@@ -76,7 +76,9 @@ def parse_corpus(path: str) -> list[CorpusEntry]:
 
     with open(path, encoding="utf-8") as f:
         for line in f:
-            match = _HEADER.match(line.strip())
+            # rstrip only: a header must start at column 0, so indented
+            # body lines that merely look like headers never match.
+            match = _HEADER.match(line.rstrip())
             if match:
                 flush()
                 current = {

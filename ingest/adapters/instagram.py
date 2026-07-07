@@ -51,7 +51,9 @@ class InstagramAdapter(SourceAdapter):
 
     def iter_records(self) -> Iterator[RawRecord]:
         for base in self.configured_paths():
-            base_path = Path(base)
+            # Resolve once so relative_to() in the extractors always shares
+            # a path basis with the resolved files from _content_files().
+            base_path = Path(base).expanduser().resolve()
             if not base_path.exists():
                 continue
             export_id = base_path.name

@@ -51,10 +51,15 @@ def run_source(adapter, manifest: Manifest, corpus_dir: str) -> dict:
             context = build_context(
                 record.source_type, text, record.relationship_hint
             )
-            if record.extra:
-                context.tone_signals.update(
-                    {k: v for k, v in record.extra.items() if v is not None}
-                )
+            for key, value in record.extra.items():
+                if value is None:
+                    continue
+                # tone_signals stays numeric-only; everything else is
+                # adapter metadata and belongs in context.extra.
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    context.tone_signals[key] = value
+                else:
+                    context.extra[key] = value
             chunk = Chunk(
                 id=digest[:16],
                 text=text,

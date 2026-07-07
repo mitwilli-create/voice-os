@@ -59,6 +59,11 @@ class Context:
     """inform | connect | coordinate | request | persuade | unknown."""
 
     tone_signals: dict = field(default_factory=dict)
+    """Numeric style metrics only (counts, ratios, pacing)."""
+
+    extra: dict = field(default_factory=dict)
+    """Adapter-specific non-numeric metadata: email subject, source eml
+    file, document chunk index, and similar."""
 
     inference: str = "heuristic-v1"
     """How the context tags were derived; lets a later model-based pass

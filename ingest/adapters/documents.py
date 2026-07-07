@@ -40,18 +40,30 @@ def split_paragraph_chunks(text: str, max_words: int) -> list[str]:
     chunks: list[str] = []
     bucket: list[str] = []
     bucket_words = 0
+
+    def flush() -> None:
+        nonlocal bucket, bucket_words
+        if bucket:
+            chunks.append("\n\n".join(bucket))
+            bucket, bucket_words = [], 0
+
     for para in re.split(r"\n\s*\n", text):
         para = para.strip()
         if not para:
             continue
-        n = len(para.split())
-        if bucket and bucket_words + n > max_words:
-            chunks.append("\n\n".join(bucket))
-            bucket, bucket_words = [], 0
+        words = para.split()
+        if len(words) > max_words:
+            # A single paragraph over the limit is word-sliced so the
+            # max_words bound holds for every emitted chunk.
+            flush()
+            for start in range(0, len(words), max_words):
+                chunks.append(" ".join(words[start : start + max_words]))
+            continue
+        if bucket_words + len(words) > max_words:
+            flush()
         bucket.append(para)
-        bucket_words += n
-    if bucket:
-        chunks.append("\n\n".join(bucket))
+        bucket_words += len(words)
+    flush()
     return chunks
 
 

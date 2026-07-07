@@ -236,3 +236,69 @@ def test_export_roundtrips_into_scoring_corpus(tmp_path):
     assert "café" in dm_entry.text
     assert dm_entry.channel.strip() == "chat"
     assert dm_entry.audience.strip() == "friend-family"
+
+
+# --- Qodo round-1 regression tests --------------------------------------
+
+
+def test_header_like_body_line_stays_one_entry(tmp_path):
+    """Finding 1: a body line that looks like a corpus header must not
+    split the entry when parsed back."""
+    chunk = {
+        "text": "Real content first line\n--- 2020-01-01 | chat | peer ---\nand the line after it",
+        "provenance": {"timestamp": "2025-03-01T10:00:00"},
+        "context": {"channel": "chat", "audience": "friend-family"},
+    }
+    from ingest.export import render_entry
+
+    out = tmp_path / "corpus.txt"
+    out.write_text(render_entry(chunk), encoding="utf-8")
+    entries = parse_corpus(str(out))
+    assert len(entries) == 1
+    assert entries[0].year == 2025
+    assert "line after it" in entries[0].text
+
+
+def test_instagram_adapter_accepts_relative_base_path(tmp_path):
+    """Finding 2: relative source paths must not crash relative_to()."""
+    rel = os.path.relpath(os.path.join(FIXTURES, "instagram_export"), os.getcwd())
+    config = make_config(tmp_path, instagram={"paths": [rel]})
+    records = list(InstagramAdapter(config).iter_records())
+    assert len(records) == 3
+    assert not any(os.path.isabs(r.origin_file) for r in records)
+
+
+def test_extra_metadata_kept_out_of_tone_signals(tmp_path):
+    """Finding 4: string metadata lands in context.extra, tone_signals
+    stays numeric-only."""
+    from ingest.adapters.messages_txt import MessagesAdapter
+    import json as json_mod
+
+    config = make_config(
+        tmp_path,
+        messages={
+            "combined_sent_paths": [os.path.join(FIXTURES, "combined_sent_sample.txt")]
+        },
+    )
+    corpus_dir = config["corpus_dir"]
+    manifest = Manifest(os.path.join(corpus_dir, "manifest.json"))
+    run_source(MessagesAdapter(config), manifest, corpus_dir)
+
+    with open(os.path.join(corpus_dir, "chunks", "messages.jsonl"), encoding="utf-8") as f:
+        chunks = [json_mod.loads(line) for line in f]
+    assert chunks
+    for chunk in chunks:
+        for value in chunk["context"]["tone_signals"].values():
+            assert isinstance(value, (int, float))
+        assert chunk["context"]["extra"].get("subject")
+
+
+def test_split_paragraph_chunks_bounds_oversized_paragraph():
+    """Finding 5: a single paragraph over the limit is sliced, never
+    emitted oversized."""
+    from ingest.adapters.documents import split_paragraph_chunks
+
+    huge = " ".join(f"word{i}" for i in range(950))
+    chunks = split_paragraph_chunks(huge, max_words=400)
+    assert all(len(c.split()) <= 400 for c in chunks)
+    assert sum(len(c.split()) for c in chunks) == 950
