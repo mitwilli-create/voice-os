@@ -1,0 +1,202 @@
+"""Tests for the mining layer. Synthetic chunks only, built in-code and
+written to tmp_path, so no real corpus content is used or committed."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+os.environ["VOICE_OS_OFFLINE"] = "1"
+
+from mine.cli import main as mine_main  # noqa: E402
+from mine.recipients import mine_recipient_deltas  # noqa: E402
+from mine.tone_norms import mine_context_profiles  # noqa: E402
+from voice_os.mined import load_artifacts, validate_artifact  # noqa: E402
+from voice_os.tone import tone_signals  # noqa: E402
+
+# Hash prefixes with known split membership: 0x00000000 % 100 = 0 (holdout
+# at 20 pct), 0xffffffff % 100 = 95 (train).
+TRAIN_HASH = "ffffffff" + "0" * 56
+HOLDOUT_HASH = "00000000" + "0" * 56
+
+
+def make_chunk(
+    text: str,
+    hint: str = "test friend",
+    tier: int = 1,
+    audience: str = "friend-family",
+    medium: str = "dm",
+    goal: str = "connect",
+    train: bool = True,
+    year: int = 2025,
+) -> dict:
+    prefix = TRAIN_HASH if train else HOLDOUT_HASH
+    body_hash = prefix[:8] + hashlib.sha256(text.encode()).hexdigest()[:56]
+    return {
+        "id": body_hash[:16],
+        "text": text,
+        "hash": body_hash,
+        "tier": tier,
+        "provenance": {
+            "source_type": "instagram_dm",
+            "origin_file": "messages.json",
+            "export_id": "synthetic",
+            "timestamp": f"{year}-06-15T12:00:00",
+            "extractor": "tests.synthetic@1.0",
+        },
+        "context": {
+            "channel": "chat",
+            "audience": audience,
+            "medium": medium,
+            "relationship_hint": hint,
+            "goal": goal,
+            "tone_signals": tone_signals(text),
+            "extra": {},
+            "inference": "heuristic-v1",
+        },
+        "schema_version": "1.0",
+    }
+
+
+def corpus_of(n: int, **kwargs) -> list[dict]:
+    return [
+        make_chunk(
+            f"hey this is synthetic test message number {i}, pretty casual and "
+            f"short. see you soon!",
+            **kwargs,
+        )
+        for i in range(n)
+    ]
+
+
+def test_recipient_deltas_respect_support_gate():
+    chunks = corpus_of(50, hint="big friend") + corpus_of(3, hint="small friend")
+    artifact = mine_recipient_deltas(chunks, min_chunks=40, min_weighted_words=100)
+    recipients = artifact["data"]["recipients"]
+    assert "big friend" in recipients
+    assert "small friend" not in recipients
+    entry = recipients["big friend"]
+    assert entry["n_chunks"] == 50
+    assert set(entry["axis_delta"]) == {
+        "rhetorical_pace", "risk_tolerance", "sentence_rhythm",
+        "escalation_pattern", "hedging_behavior", "editorial_register",
+    }
+    for delta in entry["axis_delta"].values():
+        assert -0.35 <= delta <= 0.35
+
+
+def test_tier4_chunks_carry_zero_weight():
+    chunks = corpus_of(60, hint="undated friend", tier=4)
+    try:
+        mine_recipient_deltas(chunks, min_chunks=1, min_weighted_words=1)
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised, "tier-4-only input has no weighted data and must fail fast"
+
+
+def test_holdout_chunks_excluded_from_mining():
+    chunks = corpus_of(50, hint="train friend", train=True) + corpus_of(
+        50, hint="holdout friend", train=False
+    )
+    artifact = mine_recipient_deltas(chunks, min_chunks=10, min_weighted_words=10)
+    assert "train friend" in artifact["data"]["recipients"]
+    assert "holdout friend" not in artifact["data"]["recipients"]
+    assert artifact["data"]["global"]["n_chunks"] == 50
+
+
+def test_email_recipients_aggregate_by_domain():
+    chunks = corpus_of(30, hint="pal.one@synthetic-example.com") + corpus_of(
+        30, hint="pal.two@synthetic-example.com"
+    )
+    artifact = mine_recipient_deltas(chunks, min_chunks=40, min_weighted_words=10)
+    assert artifact["data"]["recipients"] == {}
+    assert "synthetic-example.com" in artifact["data"]["domains"]
+    assert artifact["data"]["domains"]["synthetic-example.com"]["n_chunks"] == 60
+
+
+def test_context_profiles_group_by_audience_medium_goal_pair():
+    chunks = corpus_of(45, audience="friend-family", medium="dm", goal="connect")
+    chunks += corpus_of(45, audience="peer", medium="email", goal="inform")
+    artifact = mine_context_profiles(chunks, min_chunks=40)
+    data = artifact["data"]
+    assert set(data["audiences"]) == {"friend-family", "peer"}
+    assert set(data["media"]) == {"dm", "email"}
+    assert set(data["goals"]) == {"connect", "inform"}
+    assert set(data["pairs"]) == {"friend-family|dm", "peer|email"}
+    group = data["audiences"]["friend-family"]
+    assert group["n_chunks"] == 45
+    assert "exclaim_per_100w" in group["tone_mean"]
+
+
+def test_unknown_goal_not_grouped():
+    chunks = corpus_of(45, goal="unknown")
+    artifact = mine_context_profiles(chunks, min_chunks=10)
+    assert artifact["data"]["goals"] == {}
+
+
+def test_artifacts_round_trip_through_loader(tmp_path):
+    chunks = corpus_of(50, hint="loop friend")
+    mined_dir = tmp_path / "mined"
+    mined_dir.mkdir()
+    for artifact, name in (
+        (mine_recipient_deltas(chunks, min_chunks=10, min_weighted_words=10),
+         "recipient_deltas.json"),
+        (mine_context_profiles(chunks, min_chunks=10), "context_profiles.json"),
+    ):
+        (mined_dir / name).write_text(json.dumps(artifact))
+
+    loaded = load_artifacts(str(mined_dir))
+    assert loaded.recipient_deltas is not None
+    assert "loop friend" in loaded.recipient_deltas["recipients"]
+    assert loaded.context_profiles is not None
+    assert loaded.ngram_banned == []
+    assert "recipient_deltas" in loaded.meta
+
+
+def test_loader_rejects_wrong_artifact_and_version():
+    good = {"artifact": "recipient_deltas", "version": "1.0", "data": {}}
+    validate_artifact(good, "recipient_deltas")
+    bad_name = dict(good, artifact="something_else")
+    bad_version = dict(good, version="9.9")
+    for bad, expected in ((bad_name, "recipient_deltas"), (bad_version, "recipient_deltas")):
+        try:
+            validate_artifact(bad, expected)
+            raised = False
+        except ValueError:
+            raised = True
+        assert raised
+
+
+def test_loader_handles_missing_dir():
+    loaded = load_artifacts(None)
+    assert loaded.recipient_deltas is None
+    loaded = load_artifacts("/nonexistent/mined/dir")
+    assert loaded.context_profiles is None
+
+
+def test_cli_run_writes_artifacts(tmp_path):
+    chunks_dir = tmp_path / "corpus" / "chunks"
+    chunks_dir.mkdir(parents=True)
+    with open(chunks_dir / "synthetic.jsonl", "w") as f:
+        for chunk in corpus_of(50, hint="cli friend"):
+            f.write(json.dumps(chunk) + "\n")
+
+    out = tmp_path / "corpus" / "mined"
+    code = mine_main([
+        "run", "--job", "all",
+        "--corpus-dir", str(tmp_path / "corpus"),
+        "--out", str(out),
+    ])
+    assert code == 0
+    assert (out / "recipient_deltas.json").exists()
+    assert (out / "context_profiles.json").exists()
+
+    assert mine_main(["status", "--out", str(out)]) == 0
+    assert mine_main(["run", "--job", "bogus", "--corpus-dir",
+                      str(tmp_path / "corpus"), "--out", str(out)]) == 2
