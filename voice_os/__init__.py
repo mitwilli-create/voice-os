@@ -65,6 +65,7 @@ def run_pipeline(
     cycles: list[dict] = []
     modes: set[str] = set()
     result: GateResult | None = None
+    carried_findings: list[str] = []  # adversarial findings feed the next revision
 
     for cycle_number in range(max_cycles + 1):
         scores = _score(text)
@@ -83,9 +84,13 @@ def run_pipeline(
             cycles.append(record)
             break
 
-        revision = generative.revise(text, target, banned, result.revision_signals)
+        signals = result.revision_signals + [
+            f"adversarial finding (previous cycle): {f}" for f in carried_findings
+        ]
+        revision = generative.revise(text, target, banned, signals)
         critique = adversarial.critique(revision.text, target, banned)
         modes.update({revision.mode, critique.mode})
+        carried_findings = critique.notes
         record["generative_notes"] = revision.notes
         record["adversarial_findings"] = critique.notes
         cycles.append(record)

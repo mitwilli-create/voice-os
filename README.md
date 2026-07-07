@@ -85,6 +85,10 @@ The pipeline (`voice_os/` package, `score.py`, `pipeline.py`) runs end to end ag
 
 Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key; with credentials, the generative and adversarial personas run on Claude.
 
+**Privacy note:** in live mode the draft text, target profile, banned phrases, and revision signals are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Corpus text itself is never sent; only its computed axis profile is.
+
+Tests: `python -m unittest discover -s tests -v` (offline, no API key needed).
+
 CI/evaluation harness: in progress.
 
 ---

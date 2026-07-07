@@ -48,7 +48,19 @@ SITUATION_DELTAS: dict[str, dict[str, float]] = {
 
 
 def calibrate(baseline: AxisProfile, channel: str, audience: str, situation: str) -> dict[str, float]:
-    """Apply register deltas to the baseline mean; returns the target profile."""
+    """Apply register deltas to the baseline mean; returns the target profile.
+
+    Raises ValueError on unknown context values so callers of the package API
+    fail fast instead of silently receiving an uncalibrated target.
+    """
+    for value, valid, label in (
+        (channel, CHANNELS, "channel"),
+        (audience, AUDIENCES, "audience"),
+        (situation, SITUATIONS, "situation"),
+    ):
+        if value not in valid:
+            raise ValueError(f"unknown {label} '{value}'; expected one of {', '.join(valid)}")
+
     target = dict(baseline.mean)
     for table, key in (
         (CHANNEL_DELTAS, channel),
