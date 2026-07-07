@@ -1,8 +1,8 @@
 # voice-os
 
-Six-axis voice scoring. Dual-persona routing. QA gates that enforce stylistic fidelity before a draft ever reaches a human. Built on Claude. Calibrated on 6.9M+ words of executive communication.
+Six-axis voice scoring. Dual-persona routing. QA gates that hold drafts in-voice before they ever reach a human. Built on Claude. Calibrated on 6.9M+ words of executive communication.
 
-This is the engine behind the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization: a digital twin for a VP-level executive's communications. It cut executive drafting time substantially while holding high stylistic fidelity across production volume.
+This is the engine behind the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization: a digital twin for a VP-level executive's communications. Every draft is scored against the 6.9M+ word calibration corpus across six stylistic axes, and nothing ships until it clears the QA gate.
 
 ---
 
@@ -61,7 +61,7 @@ Output includes axis scores, the register-calibrated target profile, QA gate dec
 | Corpus ingestion | Parses dated corpus entries; builds a temporal-tier-weighted axis baseline | `voice_os/corpus.py` |
 | Six-axis scorer | Evaluates drafts against the baseline across six stylistic axes | `voice_os/axes.py` |
 | Register calibration | Channel x audience x situation deltas produce the generation target | `voice_os/calibration.py` |
-| Dual-persona router | Generative persona revises; adversarial persona stress-tests fidelity | `voice_os/personas.py` |
+| Dual-persona router | Generative persona revises; adversarial persona stress-tests voice match | `voice_os/personas.py` |
 | QA gate | Blocks output below threshold; returns structured revision signal | `voice_os/qa.py` |
 | Banned-phrase enforcement | Flags patterns the voice explicitly rejects | `voice_os/qa.py` |
 
@@ -76,7 +76,7 @@ The `voice_os` package is importable directly (`from voice_os import run_pipelin
 ## What this demonstrates
 
 - **Production RAG design.** Not a demo. A system that ran at executive scale inside a large engineering organization.
-- **Evaluation rigor.** Quantified fidelity scoring, not vibes.
+- **Evaluation rigor.** Quantified six-axis voice scoring, not vibes.
 - **Agentic architecture.** Multi-step pipeline with conditional routing and gate logic.
 - **Domain depth.** A decade in newsrooms and eight years inside a large engineering organization built the editorial judgment that makes the scoring axes meaningful.
 
