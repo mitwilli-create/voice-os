@@ -21,8 +21,8 @@ are optional and default to "email" / "peer".
 
 from __future__ import annotations
 
+import math
 import re
-import statistics
 from dataclasses import dataclass, field
 
 from .axes import AXES, AxisProfile, score_text
@@ -106,6 +106,7 @@ def build_baseline(entries: list[CorpusEntry]) -> AxisProfile:
         values = [(e.scores[axis], w) for e, w in weighted]
         m = sum(v * w for v, w in values) / total
         mean[axis] = round(m, 3)
-        # weight-agnostic spread is fine for a tolerance band
-        std[axis] = round(statistics.pstdev([v for v, _ in values]), 3)
+        # tier-weighted spread, consistent with the tier-weighted mean
+        variance = sum(w * (v - m) ** 2 for v, w in values) / total
+        std[axis] = round(math.sqrt(variance), 3)
     return AxisProfile(mean=mean, std=std)

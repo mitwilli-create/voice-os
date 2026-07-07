@@ -20,6 +20,8 @@ Most "voice matching" is prompt engineering with a few examples. This is a calib
 
 ## Quick Start
 
+Requires Python 3.10 or newer.
+
 ```bash
 # Clone the repo
 git clone https://github.com/mitwilli-create/voice-os.git

@@ -35,13 +35,18 @@ def _warn_once(message: str) -> None:
 
 
 def get_client():
-    """Return an Anthropic client, or None when unavailable or opted out."""
+    """Return an Anthropic client, or None when unavailable or opted out.
+
+    VOICE_OS_OFFLINE is checked on every call, before the client cache, so
+    the privacy override holds even when the flag is set mid-process after
+    a client has already been created.
+    """
     global _client, _client_checked
+    if os.environ.get("VOICE_OS_OFFLINE"):
+        return None
     if _client_checked:
         return _client
     _client_checked = True
-    if os.environ.get("VOICE_OS_OFFLINE"):
-        return None
     if anthropic is None:
         return None
     try:
