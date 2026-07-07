@@ -67,9 +67,16 @@ def load_artifacts(mined_dir: str | None) -> MinedArtifacts:
             "miner": raw.get("miner"),
         }
         if name == "ngram_banned":
-            artifacts.ngram_banned = [
-                entry["ngram"] for entry in raw["data"].get("banned", [])
-            ]
+            entries = raw["data"].get("banned", [])
+            if not isinstance(entries, list) or any(
+                not isinstance(e, dict) or not isinstance(e.get("ngram"), str)
+                for e in entries
+            ):
+                raise ValueError(
+                    f"artifact {name} has a malformed banned list; expected "
+                    "a list of objects each carrying an 'ngram' string"
+                )
+            artifacts.ngram_banned = [entry["ngram"] for entry in entries]
         elif name == "recipient_deltas":
             artifacts.recipient_deltas = raw["data"]
         elif name == "context_profiles":

@@ -136,3 +136,43 @@ class TestGateAndRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRobustness(unittest.TestCase):
+    def test_corrupt_jsonl_line_is_skipped(self):
+        import json as _json
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as chunks_dir:
+            with open(Path(chunks_dir) / "store.jsonl", "w") as f:
+                f.write("{not valid json\n")
+                f.write(_json.dumps({
+                    "id": "abcdef0123456789", "text": "hey, quick note!",
+                    "hash": "ffffffff" + "0" * 56, "tier": 1,
+                    "provenance": {"timestamp": "2025-06-15T12:00:00"},
+                    "context": {"audience": "peer", "medium": "email",
+                                "goal": "unknown"},
+                }) + "\n")
+                f.write('"a bare string, not a chunk"\n')
+            model = VoiceModel.load(
+                CORPUS, chunks_dir=chunks_dir, mined_dir=None, banned_path=BANNED,
+            )
+            q = model.query(audience="peer")
+            self.assertEqual(len(q.exemplars), 1)
+
+    def test_malformed_ngram_artifact_fails_fast(self):
+        import json as _json
+        import tempfile
+
+        from voice_os.mined import load_artifacts
+
+        with tempfile.TemporaryDirectory() as mined_dir:
+            bad = {
+                "artifact": "ngram_banned", "version": "1.0",
+                "generated_at": "2026-07-07", "miner": "t",
+                "data": {"banned": [{"no_ngram_key": True}]},
+            }
+            with open(Path(mined_dir) / "ngram_banned.json", "w") as f:
+                _json.dump(bad, f)
+            with self.assertRaises(ValueError):
+                load_artifacts(mined_dir)

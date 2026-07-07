@@ -190,15 +190,26 @@ class VoiceModel:
         return None, "absent"
 
     def _iter_chunks(self):
-        """Local JSONL chunk iterator; voice_os stays independent of ingest."""
+        """Local JSONL chunk iterator; voice_os stays independent of ingest.
+
+        Malformed lines are skipped rather than raised: the chunk store is
+        optional input to the facade, and one corrupt line must not break
+        query() (graceful-degradation contract).
+        """
         import glob
 
         for path in sorted(glob.glob(os.path.join(self.chunks_dir, "*.jsonl"))):
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line:
-                        yield json.loads(line)
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(chunk, dict):
+                        yield chunk
 
     def _exemplars(self, ctx: VoiceContext, target: dict[str, float]) -> list[dict]:
         """Up to EXEMPLAR_K held-in tier 1/2 chunks matching the context,
@@ -211,28 +222,34 @@ class VoiceModel:
         """
         if not self.chunks_dir:
             return []
+        import heapq
+
         from .holdout import is_holdout
 
-        candidates: list[tuple[str, dict]] = []
-        for chunk in self._iter_chunks():
-            if chunk.get("tier") not in (1, 2):
-                continue
-            if is_holdout(chunk["hash"]):
-                continue
-            context = chunk.get("context", {})
-            if context.get("audience") != ctx.audience:
-                continue
-            if ctx.medium and context.get("medium") != ctx.medium:
-                continue
-            if ctx.goal != "unknown" and context.get("goal") != ctx.goal:
-                continue
-            timestamp = chunk.get("provenance", {}).get("timestamp") or ""
-            candidates.append((timestamp, chunk))
+        def matching():
+            for chunk in self._iter_chunks():
+                if chunk.get("tier") not in (1, 2):
+                    continue
+                if is_holdout(chunk["hash"]):
+                    continue
+                context = chunk.get("context", {})
+                if context.get("audience") != ctx.audience:
+                    continue
+                if ctx.medium and context.get("medium") != ctx.medium:
+                    continue
+                if ctx.goal != "unknown" and context.get("goal") != ctx.goal:
+                    continue
+                timestamp = chunk.get("provenance", {}).get("timestamp") or ""
+                yield timestamp, chunk
 
-        candidates.sort(key=lambda pair: pair[0], reverse=True)
+        # One streaming pass with a bounded heap: O(N log K) with K =
+        # EXEMPLAR_CANDIDATES, no full-store sort or materialization.
+        recent = heapq.nlargest(
+            EXEMPLAR_CANDIDATES, matching(), key=lambda pair: pair[0]
+        )
         target_profile = AxisProfile(mean=target, std=self.baseline.std)
         scored = []
-        for timestamp, chunk in candidates[:EXEMPLAR_CANDIDATES]:
+        for timestamp, chunk in recent:
             fit, _ = target_profile.fidelity(score_text(chunk["text"]))
             scored.append((fit, timestamp, chunk))
         scored.sort(key=lambda triple: (triple[0], triple[1]), reverse=True)
