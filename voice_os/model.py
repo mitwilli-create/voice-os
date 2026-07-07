@@ -10,7 +10,6 @@ the sources map says so. Offline-deterministic either way.
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 
@@ -190,26 +189,9 @@ class VoiceModel:
         return None, "absent"
 
     def _iter_chunks(self):
-        """Local JSONL chunk iterator; voice_os stays independent of ingest.
+        from .store import iter_chunks
 
-        Malformed lines are skipped rather than raised: the chunk store is
-        optional input to the facade, and one corrupt line must not break
-        query() (graceful-degradation contract).
-        """
-        import glob
-
-        for path in sorted(glob.glob(os.path.join(self.chunks_dir, "*.jsonl"))):
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(chunk, dict):
-                        yield chunk
+        return iter_chunks(self.chunks_dir)
 
     def _exemplars(self, ctx: VoiceContext, target: dict[str, float]) -> list[dict]:
         """Up to EXEMPLAR_K held-in tier 1/2 chunks matching the context,
