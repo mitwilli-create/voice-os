@@ -20,15 +20,16 @@ Most "voice matching" is prompt engineering with a few examples. This is a calib
 
 ## Quick Start
 
+Requires Python 3.10 or newer.
+
 ```bash
 # Clone the repo
 git clone https://github.com/mitwilli-create/voice-os.git
 cd voice-os
 
-# Install dependencies
+# Optional: enables the live Claude personas. The pipeline runs
+# deterministically offline without it (no API key required).
 pip install -r requirements.txt
-
-# Set your API key
 export ANTHROPIC_API_KEY=your_key_here
 
 # Run a scoring pass against the sample corpus
@@ -40,21 +41,34 @@ python pipeline.py \
   --banned-list data/banned_list.txt \
   --draft data/sample_draft.txt \
   --output output/scored_draft.json
+
+# Same pipeline on a draft that is already in-voice (gate returns "pass")
+python pipeline.py \
+  --corpus data/sample_corpus.txt \
+  --banned-list data/banned_list.txt \
+  --draft data/sample_draft_good.txt
 ```
 
-Output includes axis scores, persona deltas, QA gate decision (pass / cycle), and a revision trace.
+Output includes axis scores, the register-calibrated target profile, QA gate decision (pass / cycle), and a full revision trace per cycle. Exit code 0 means the gate passed; 1 means the draft still needs a cycle. Context flags (`--channel`, `--audience`, `--situation`) select the register calibration applied to the target.
 
 ---
 
 ## Architecture
 
-| Layer | Function |
-|---|---|
-| Corpus ingestion | Chunks and embeds voice corpus; builds axis score baseline |
-| Six-axis scorer | Evaluates drafts against baseline across six stylistic dimensions |
-| Dual-persona router | Generative persona drafts; adversarial persona stress-tests fidelity |
-| QA gate | Blocks output below threshold; returns structured revision signal |
-| Banned-phrase enforcement | Flags patterns the voice explicitly rejects |
+| Layer | Function | Module |
+|---|---|---|
+| Corpus ingestion | Parses dated corpus entries; builds a temporal-tier-weighted axis baseline | `voice_os/corpus.py` |
+| Six-axis scorer | Evaluates drafts against the baseline across six stylistic axes | `voice_os/axes.py` |
+| Register calibration | Channel x audience x situation deltas produce the generation target | `voice_os/calibration.py` |
+| Dual-persona router | Generative persona revises; adversarial persona stress-tests fidelity | `voice_os/personas.py` |
+| QA gate | Blocks output below threshold; returns structured revision signal | `voice_os/qa.py` |
+| Banned-phrase enforcement | Flags patterns the voice explicitly rejects | `voice_os/qa.py` |
+
+### The canonical six axes
+
+One canonical axis set is used everywhere (scoring baseline, calibration target, QA gate): **rhetorical pace, risk tolerance, sentence rhythm, escalation pattern, hedging behavior, editorial register.** An earlier iteration of this system (documented in `docs/architecture.md`) expressed register calibration on a second dimension set (directness, structure, warmth, formality, precision, assertiveness); those are now re-expressed as deltas on the canonical axes. The mapping lives in [`voice_os/axes.py`](voice_os/axes.py).
+
+The `voice_os` package is importable directly (`from voice_os import run_pipeline, score_draft`), which is the foundation for the callable voice module and MCP interface on the roadmap.
 
 ---
 
@@ -69,7 +83,13 @@ Output includes axis scores, persona deltas, QA gate decision (pass / cycle), an
 
 ## Status
 
-Pipeline architecture and scoring logic are documented here. Core corpus and VP-identity data are not included. That's proprietary. Sample data is synthetic but structurally representative.
+The pipeline (`voice_os/` package, `score.py`, `pipeline.py`) runs end to end against the synthetic sample data in `data/`. Core corpus and VP-identity data are not included. That's proprietary. Sample data is synthetic but structurally representative.
+
+Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key; with credentials, the generative and adversarial personas run on Claude.
+
+**Privacy note:** in live mode the draft text, target profile, banned phrases, and revision signals are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Corpus text itself is never sent; only its computed axis profile is.
+
+Tests: `python -m unittest discover -s tests -v` (offline, no API key needed).
 
 CI/evaluation harness: in progress.
 

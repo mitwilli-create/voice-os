@@ -1,0 +1,3 @@
+The timeline review is done, and we're two weeks behind on the data layer.
+Here's the recovery plan. We pull the labeling work forward since it's independent, and I pair with Sam on the schema migration this week. That puts us back on track for the April 3 release.
+Can you confirm the labeling swap works for your team by Thursday?

@@ -1,0 +1,15 @@
+# Phrases this voice never uses. Curated from rejected drafts.
+# One phrase per line; lines starting with # are comments.
+i hope this email finds you well
+i wanted to reach out
+just checking in
+touch base
+circle back
+leverage
+synergy
+deep dive
+at your earliest convenience
+please don't hesitate to reach out
+moving forward
+per my last email
+keep the lines of communication open

@@ -191,6 +191,8 @@ This classification drives which register adjustments get applied. The system st
 
 ### Dimension Scoring
 
+> **Note on dimension names:** the six register dimensions below (directness, structure, warmth, formality, precision, assertiveness) describe the claude.ai Projects deployment this document covers. The Python pipeline in this repo uses the canonical six axes (rhetorical pace, risk tolerance, sentence rhythm, escalation pattern, hedging behavior, editorial register) and re-expresses these register dimensions as deltas on those axes. The mapping lives in `voice_os/axes.py`.
+
 After classification, the system computes adjusted dimension scores by applying deltas to my baseline:
 
 ```

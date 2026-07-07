@@ -1,0 +1,3 @@
+# Optional: enables the live Claude personas. The pipeline runs
+# deterministically offline without it.
+anthropic>=0.60
