@@ -15,6 +15,7 @@ import sys
 from ingest.export import iter_chunk_dicts
 
 from .contrast import DEFAULT_GENERATED, DEFAULT_SEED, generate_contrast, load_contrast
+from .drift import mine_drift
 from .ngrams import load_never_ban, mine_ngram_diffs
 from .recipients import mine_recipient_deltas
 from .tone_norms import mine_context_profiles
@@ -27,6 +28,7 @@ JOBS = {
     "recipients": (mine_recipient_deltas, "recipient_deltas.json"),
     "tone": (mine_context_profiles, "context_profiles.json"),
     "ngrams": (None, "ngram_banned.json"),
+    "drift": (mine_drift, "drift_report.json"),
 }
 
 
