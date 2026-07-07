@@ -41,10 +41,38 @@ from .tone import TONE_METRICS, ToneProfile, derive_metrics
 
 DEFAULT_CORPUS_DIR = "corpus"
 LABELS_FILE = os.path.join("labels", "goals.jsonl")
-CONTRAST_PATHS = (
-    os.path.join("data", "contrast", "synthetic_llm.txt"),
-    os.path.join("corpus", "contrast", "generated.jsonl"),
-)
+# The committed seed resolves relative to this file (not the working
+# directory); the generated set lives under the corpus dir given at run
+# time, so a non-default corpus root reads its own contrast data.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SEED_CONTRAST_PATH = os.path.join(_REPO_ROOT, "data", "contrast", "synthetic_llm.txt")
+
+
+def _holdout_generation_chunk(chunk: dict, holdout_pct: int) -> bool:
+    """True for a well-formed held-out chunk with generation weight.
+
+    Malformed records (missing text, short or non-hex hash, non-numeric
+    tier) are skipped, matching the store's graceful-degradation contract.
+    """
+    if not isinstance(chunk.get("text"), str) or not chunk["text"]:
+        return False
+    try:
+        if not is_holdout(chunk.get("hash", ""), holdout_pct):
+            return False
+        tier = int(chunk.get("tier", 4))
+    except (TypeError, ValueError):
+        return False
+    return TIER_WEIGHTS.get(tier, 0.0) > 0
+
+
+def _profile_tone(profile: dict | None) -> ToneProfile | None:
+    """ToneProfile from a mined group profile; None when the shape is off."""
+    if not isinstance(profile, dict):
+        return None
+    mean, std = profile.get("tone_mean"), profile.get("tone_std")
+    if isinstance(mean, dict) and isinstance(std, dict) and mean:
+        return ToneProfile(mean=mean, std=std)
+    return None
 
 
 def _chunk_context(chunk: dict) -> VoiceContext | None:
@@ -77,9 +105,9 @@ def _tone_lookup(mined: MinedArtifacts, ctx: VoiceContext) -> ToneProfile | None
     if ctx.goal != "unknown":
         lookups.append(("goals", ctx.goal))
     for kind, key in lookups:
-        profile = group_profile(profiles, kind, key)
-        if profile:
-            return ToneProfile(mean=profile["tone_mean"], std=profile["tone_std"])
+        tone = _profile_tone(group_profile(profiles, kind, key))
+        if tone:
+            return tone
     return None
 
 
@@ -102,10 +130,14 @@ def _load_goal_labels(corpus_dir: str) -> dict[str, str]:
     return labels
 
 
-def _load_contrast_passages() -> list[str]:
+def _load_contrast_passages(corpus_dir: str) -> list[str]:
     # Local, minimal reader: eval must not depend on the mine package.
     passages: list[str] = []
-    for path in CONTRAST_PATHS:
+    paths = (
+        SEED_CONTRAST_PATH,
+        os.path.join(corpus_dir, "contrast", "generated.jsonl"),
+    )
+    for path in paths:
         if not os.path.exists(path):
             continue
         if path.endswith(".jsonl"):
@@ -145,10 +177,7 @@ def evaluate(
 
     baseline = load_corpus(corpus_path)
     mined = load_artifacts(mined_dir)
-    global_tone = None
-    if mined.context_profiles and mined.context_profiles.get("global", {}).get("tone_mean"):
-        g = mined.context_profiles["global"]
-        global_tone = ToneProfile(mean=g["tone_mean"], std=g["tone_std"])
+    global_tone = _profile_tone((mined.context_profiles or {}).get("global"))
 
     fidelity_sums = {"baseline_only": 0.0, "hand_calibrated": 0.0, "extended_mined": 0.0}
     breakouts: dict[str, dict[str, list[float]]] = {
@@ -166,9 +195,7 @@ def evaluate(
     target_cache: dict[tuple, tuple[dict, dict]] = {}
 
     for chunk in iter_chunks(chunks_dir):
-        if not is_holdout(chunk.get("hash", ""), holdout_pct):
-            continue
-        if TIER_WEIGHTS.get(int(chunk.get("tier", 4)), 0.0) <= 0:
+        if not _holdout_generation_chunk(chunk, holdout_pct):
             continue
         ctx = _chunk_context(chunk)
         if ctx is None:
@@ -252,7 +279,7 @@ def evaluate(
     }
 
     if mined.ngram_banned:
-        contrast = _load_contrast_passages()
+        contrast = _load_contrast_passages(os.path.dirname(chunks_dir) or DEFAULT_CORPUS_DIR)
         if contrast:
             hits = sum(
                 1 for text in contrast if find_banned(text, mined.ngram_banned)
@@ -330,8 +357,7 @@ def sample_for_labeling(chunks_dir: str, n: int = 30, holdout_pct: int = 20) -> 
     held_out = [
         chunk
         for chunk in iter_chunks(chunks_dir)
-        if is_holdout(chunk.get("hash", ""), holdout_pct)
-        and TIER_WEIGHTS.get(int(chunk.get("tier", 4)), 0.0) > 0
+        if _holdout_generation_chunk(chunk, holdout_pct)
     ]
     held_out.sort(key=lambda c: c.get("hash", ""))
     return held_out[:n]

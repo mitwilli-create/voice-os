@@ -116,3 +116,59 @@ def test_cli_run_and_label(tmp_path, capsys, monkeypatch):
     save_path = tmp_path / "corpus" / "runs" / "eval-test.json"
     assert main(["--corpus-dir", "corpus", "--save", str(save_path)]) == 0
     assert save_path.exists()
+
+
+def test_malformed_chunks_skipped_not_crashed(tmp_path):
+    chunks = mixed_chunks()
+    bad_hash = make_chunk("bad hash chunk", train=False)
+    bad_hash["hash"] = "zz"
+    bad_tier = make_chunk("bad tier chunk", train=False)
+    bad_tier["tier"] = "not-a-number"
+    no_text = make_chunk("placeholder", train=False)
+    no_text["text"] = None
+    chunks_dir = build_store(tmp_path, chunks + [bad_hash, bad_tier, no_text])
+    scorecard = evaluate(CORPUS, chunks_dir, mined_dir=None)
+    assert scorecard["holdout"]["chunks"] == 40
+    assert len(sample_for_labeling(chunks_dir, 100)) == 40
+
+
+def test_malformed_context_profiles_degrade_to_no_tone(tmp_path):
+    mined_dir = tmp_path / "mined"
+    mined_dir.mkdir()
+    (mined_dir / "context_profiles.json").write_text(json.dumps({
+        "artifact": "context_profiles", "version": "1.0",
+        "generated_at": "2026-07-07", "miner": "t",
+        "data": {
+            "global": {"tone_mean": "not-a-dict", "tone_std": {}},
+            "audiences": {"friend-family": {"n_chunks": 100,
+                                            "tone_mean": None, "tone_std": None}},
+            "media": {}, "goals": {}, "pairs": {},
+        },
+    }))
+    chunks_dir = build_store(tmp_path, mixed_chunks())
+    scorecard = evaluate(CORPUS, chunks_dir, mined_dir=str(mined_dir))
+    assert scorecard["tone_mae"]["mined"] is None
+    assert scorecard["tone_mae"]["global"] is None
+
+
+def test_contrast_recall_respects_corpus_dir(tmp_path):
+    import voice_os.eval as eval_mod
+
+    chunks_dir = build_store(tmp_path, mixed_chunks())
+    mined_dir = tmp_path / "corpus" / "mined"
+    mined_dir.mkdir()
+    (mined_dir / "ngram_banned.json").write_text(json.dumps({
+        "artifact": "ngram_banned", "version": "1.0",
+        "generated_at": "2026-07-07", "miner": "t",
+        "data": {"banned": [{"ngram": "flagrant slop marker"}]},
+    }))
+    contrast_dir = tmp_path / "corpus" / "contrast"
+    contrast_dir.mkdir()
+    (contrast_dir / "generated.jsonl").write_text(
+        json.dumps({"text": "this has the flagrant slop marker in it"}) + "\n"
+    )
+    scorecard = evaluate(CORPUS, chunks_dir, mined_dir=str(mined_dir))
+    # seed passages load from the repo; the generated file from tmp corpus dir
+    seed_count = len(eval_mod._load_contrast_passages(str(tmp_path / "corpus"))) - 1
+    assert scorecard["banned"]["contrast_passages"] == seed_count + 1
+    assert scorecard["banned"]["contrast_recall"] > 0
