@@ -51,14 +51,14 @@ def mine_drift(
         if not is_train(chunk, holdout_pct):
             continue
         timestamp = chunk.get("provenance", {}).get("timestamp")
-        if not timestamp or len(timestamp) < 7:
+        window = window_key(timestamp) if timestamp else None
+        if window is None:
             undated += 1
             continue
         total += 1
         text = chunk["text"]
         dated_scores.append((timestamp, score_text(text)))
 
-        window = window_key(timestamp)
         counts = counts_by_window.setdefault(window, {})
         for form, pattern in patterns.items():
             hits = len(pattern.findall(text))
@@ -71,7 +71,14 @@ def mine_drift(
 
     windows = window_profiles(dated_scores, min_chunks=min_chunks)
     flags = flag_shifts(windows)
-    marker_data = marker_series(counts_by_window, markers, word_totals)
+    # Marker analysis covers only the windows the axis analysis kept, so
+    # crossovers are never reported from windows dropped as too sparse.
+    kept = {w["window"] for w in windows}
+    marker_data = marker_series(
+        {k: v for k, v in counts_by_window.items() if k in kept},
+        markers,
+        {k: v for k, v in word_totals.items() if k in kept},
+    )
     suggestions = suggest_boundaries(flags, marker_data)
 
     data = {
@@ -81,8 +88,9 @@ def mine_drift(
         "suggestions": suggestions,
         "stats": {
             "dated_chunks": total,
-            "undated_skipped": undated,
+            "undated_or_malformed_skipped": undated,
             "windows_kept": len(windows),
+            "windows_dropped": len(set(counts_by_window) - kept),
         },
     }
     return envelope(

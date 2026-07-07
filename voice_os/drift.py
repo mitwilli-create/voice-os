@@ -27,10 +27,20 @@ SUSTAIN_WINDOWS = 2
 TOLERANCE_FLOOR = 0.12
 
 
-def window_key(timestamp: str) -> str:
-    """Half-year bucket for an ISO timestamp: '2020-08-01...' -> '2020H2'."""
-    year = timestamp[:4]
-    month = int(timestamp[5:7])
+def window_key(timestamp: str) -> str | None:
+    """Half-year bucket for an ISO timestamp: '2020-08-01...' -> '2020H2'.
+
+    Returns None for malformed timestamps (non-numeric year or month,
+    month out of range) so callers can skip them instead of crashing.
+    """
+    if not timestamp or len(timestamp) < 7:
+        return None
+    year, month_str = timestamp[:4], timestamp[5:7]
+    if not (year.isdigit() and month_str.isdigit()):
+        return None
+    month = int(month_str)
+    if not 1 <= month <= 12:
+        return None
     return f"{year}H{1 if month <= 6 else 2}"
 
 
@@ -40,15 +50,17 @@ def window_profiles(
 ) -> list[dict]:
     """Per-half-year axis means over (timestamp, axis_scores) pairs.
 
-    Windows with fewer than min_chunks samples are dropped (recorded in
-    the returned dicts' sibling count so callers can report them).
-    Returns chronologically sorted window dicts.
+    Malformed timestamps are skipped. Windows with fewer than min_chunks
+    samples are dropped; mine/drift.py reports how many via its
+    stats.windows_dropped field. Returns chronologically sorted window
+    dicts.
     """
     buckets: dict[str, list[dict[str, float]]] = {}
     for timestamp, scores in dated_scores:
-        if not timestamp or len(timestamp) < 7:
+        key = window_key(timestamp)
+        if key is None:
             continue
-        buckets.setdefault(window_key(timestamp), []).append(scores)
+        buckets.setdefault(key, []).append(scores)
 
     windows = []
     for key in sorted(buckets):

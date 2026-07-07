@@ -174,3 +174,38 @@ def test_cli_drift_job(tmp_path):
     loaded = load_artifacts(str(out))
     assert loaded.drift_report is not None
     assert loaded.drift_report["markers"]["yea->yeah"]["crossover"]
+
+
+def test_window_key_rejects_malformed_timestamps():
+    assert window_key("not-a-date") is None
+    assert window_key("2020-xx-01") is None
+    assert window_key("2020-13-01") is None
+    assert window_key("") is None
+    assert window_key("2020-06-01") == "2020H1"
+
+
+def test_malformed_timestamps_skipped_not_crashed():
+    chunks = _era_chunks()
+    bad = make_chunk("text with a broken timestamp")
+    bad["provenance"]["timestamp"] = "20xx-99-zz"
+    artifact = mine_drift(chunks + [bad], markers=[("yea", "yeah")])
+    assert artifact["data"]["stats"]["undated_or_malformed_skipped"] == 1
+
+
+def test_markers_cover_only_kept_windows():
+    chunks = _era_chunks()
+    # A sparse window (below min 30 chunks) full of the new marker form
+    # must not influence marker series or crossover detection.
+    sparse = []
+    for j in range(5):
+        chunk = make_chunk(f"yeah yeah yeah sparse {j}")
+        chunk["provenance"]["timestamp"] = "2017-03-15T12:00:00"
+        chunk["tier"] = 3
+        sparse.append(chunk)
+    artifact = mine_drift(chunks + sparse, markers=[("yea", "yeah")])
+    windows_in_series = {
+        row["window"]
+        for row in artifact["data"]["markers"]["yea->yeah"]["series"]
+    }
+    assert "2017H1" not in windows_in_series
+    assert artifact["data"]["stats"]["windows_dropped"] == 1
