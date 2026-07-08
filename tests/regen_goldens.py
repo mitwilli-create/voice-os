@@ -45,6 +45,11 @@ def main() -> int:
         )
     golden_utils.write_golden(golden_utils.DRAFT_GOLDEN, envelope)
     print(f"wrote {golden_utils.DRAFT_GOLDEN}")
+
+    with tempfile.TemporaryDirectory(prefix="regen-goldens-") as work_dir:
+        summary = golden_utils.build_harness_result(work_dir)["summary"]
+    golden_utils.write_golden(golden_utils.HARNESS_GOLDEN, summary)
+    print(f"wrote {golden_utils.HARNESS_GOLDEN}")
     return 0
 
 

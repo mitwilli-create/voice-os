@@ -213,6 +213,14 @@ _EVOLUTION_EXPORTS = frozenset(
         "describe_drift_graph",
     }
 )
+_HARNESS_EXPORTS = frozenset(
+    {
+        "harness_run",
+        "harness_gate",
+        "harness_history",
+        "describe_harness_graph",
+    }
+)
 
 
 def __getattr__(name: str):
@@ -224,8 +232,17 @@ def __getattr__(name: str):
         from . import evolution
 
         return getattr(evolution, name)
+    if name in _HARNESS_EXPORTS:
+        from . import harness
+
+        return getattr(harness, name)
     raise AttributeError(f"module 'voice_os' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-    return sorted(set(globals()) | _PRODUCT_EXPORTS | _EVOLUTION_EXPORTS)
+    return sorted(
+        set(globals())
+        | _PRODUCT_EXPORTS
+        | _EVOLUTION_EXPORTS
+        | _HARNESS_EXPORTS
+    )

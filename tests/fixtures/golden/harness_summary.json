@@ -1,0 +1,229 @@
+{
+  "by_audience": {
+    "friend-family": {
+      "alignment_judged": null,
+      "alignment_offline": 0.7072,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9291,
+      "style_axes": {
+        "editorial_register": 0.97,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.564,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    },
+    "peer": {
+      "alignment_judged": null,
+      "alignment_offline": 0.707,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9292,
+      "style_axes": {
+        "editorial_register": 0.9687,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.5637,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    }
+  },
+  "by_cell": {
+    "chat|friend-family": {
+      "alignment_judged": null,
+      "alignment_offline": 0.7072,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9291,
+      "style_axes": {
+        "editorial_register": 0.97,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.564,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    },
+    "email|peer": {
+      "alignment_judged": null,
+      "alignment_offline": 0.707,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9292,
+      "style_axes": {
+        "editorial_register": 0.9687,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.5637,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    }
+  },
+  "by_channel": {
+    "chat": {
+      "alignment_judged": null,
+      "alignment_offline": 0.7072,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9291,
+      "style_axes": {
+        "editorial_register": 0.97,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.564,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    },
+    "email": {
+      "alignment_judged": null,
+      "alignment_offline": 0.707,
+      "banned_hit_rate": 0.0,
+      "em_dash_rate": 0.0,
+      "judge_same_author": 3.0,
+      "length_ratio": 0.8333,
+      "n": 3,
+      "pass_rate": 0.0,
+      "similarity_content": 0.9177,
+      "similarity_surface": 0.9292,
+      "style_axes": {
+        "editorial_register": 0.9687,
+        "escalation_pattern": 0.0,
+        "hedging_behavior": 0.414,
+        "rhetorical_pace": 1.0,
+        "risk_tolerance": 1.0,
+        "sentence_rhythm": 0.0
+      },
+      "style_overall": 0.5637,
+      "tone_mae": {
+        "avg_sentence_words": 0.8,
+        "caps_ratio": 0.01,
+        "emoji_per_100w": 0.0,
+        "exclaim_per_100w": 3.33,
+        "question_ratio": 0.0
+      }
+    }
+  },
+  "cases": 6,
+  "live_models": [],
+  "mode": {
+    "embed_backend": "lexical",
+    "judge": "offline",
+    "personas": "offline"
+  },
+  "overall": {
+    "alignment_judged": null,
+    "alignment_offline": 0.7071,
+    "banned_hit_rate": 0.0,
+    "em_dash_rate": 0.0,
+    "judge_same_author": 3.0,
+    "length_ratio": 0.8333,
+    "n": 6,
+    "pass_rate": 0.0,
+    "similarity_content": 0.9177,
+    "similarity_surface": 0.9291,
+    "style_axes": {
+      "editorial_register": 0.9693,
+      "escalation_pattern": 0.0,
+      "hedging_behavior": 0.414,
+      "rhetorical_pace": 1.0,
+      "risk_tolerance": 1.0,
+      "sentence_rhythm": 0.0
+    },
+    "style_overall": 0.5638,
+    "tone_mae": {
+      "avg_sentence_words": 0.8,
+      "caps_ratio": 0.01,
+      "emoji_per_100w": 0.0,
+      "exclaim_per_100w": 3.33,
+      "question_ratio": 0.0
+    }
+  },
+  "params": {
+    "cap": 6,
+    "max_revisions": 2,
+    "per_cell": 3
+  },
+  "schema_version": "1.0",
+  "weights": {
+    "judged": {
+      "content": 0.2,
+      "judge": 0.3,
+      "style": 0.5
+    },
+    "offline": {
+      "content": 0.25,
+      "style": 0.6,
+      "surface": 0.15
+    }
+  }
+}

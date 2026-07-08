@@ -92,7 +92,18 @@ Every stage has a deterministic offline implementation, so scoring and gating ar
 
 Tests: `python -m pytest tests/` runs the full suite, scoring plus ingestion (offline, no API key needed). The core scoring tests also run dependency-free via `python -m unittest discover -s tests -v`.
 
-CI/evaluation harness: in progress.
+Evaluation harness + regression gate: `python3 -m voice_os.harness run`
+drafts real held-out Tier 1 messages through the full pipeline and
+scores generated vs real (embedding similarity, paired style fidelity
+on the six axes, LLM judge in live mode), reporting per-channel and
+per-audience fidelity. The gate blocks modeling and pipeline changes
+that regress the deterministic offline numbers, in three layers:
+the fixture-corpus golden lock runs inside the standard pytest suite;
+`.githooks/pre-push` re-runs it (plus the real-corpus gate when a
+local baseline exists) on every push from a clone that has enabled
+hooks (`git config core.hooksPath .githooks`); and the baseline moves
+only by explicit `python3 -m voice_os.harness gate --update-baseline`.
+Design and honesty constraints: `docs/eval-harness.md`.
 
 ---
 

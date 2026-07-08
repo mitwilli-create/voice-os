@@ -356,6 +356,30 @@ def _normalize_drift_envelope(envelope: dict) -> dict:
     return envelope
 
 
+# ------------------------------------ harness module (docs/eval-harness.md)
+
+
+def test_harness_pure_surfaces_double_run(tmp_path):
+    from voice_os.harness import build_brief, select_cases
+
+    text = "Hey there,\nMaybe we just ship the fix today! 🚀\nThanks"
+    assert_double_run(lambda: build_brief(text))
+
+    chunks_dir = str(tmp_path / "chunks")
+    golden_utils.write_harness_chunk_store(chunks_dir)
+    assert_double_run(lambda: select_cases(chunks_dir, per_cell=3, cap=6))
+
+
+def test_harness_summary_double_run(tmp_path):
+    """The full offline eval loop is deterministic: two runs from
+    identical inputs produce byte-identical summaries (run-scoped
+    fields live only in the envelope and report files, not here)."""
+    pytest.importorskip("langgraph")
+    first = golden_utils.build_harness_result(str(tmp_path / "a"))["summary"]
+    second = golden_utils.build_harness_result(str(tmp_path / "b"))["summary"]
+    assert canon(first) == canon(second)
+
+
 def test_drift_run_envelope_double_run(tmp_path):
     pytest.importorskip("langgraph")
     from voice_os.evolution import drift_run
