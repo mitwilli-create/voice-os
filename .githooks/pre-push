@@ -1,0 +1,38 @@
+#!/bin/sh
+# Enforcement layer 2 of the evaluation regression gate
+# (docs/eval-harness.md): the fixture-corpus harness tests always run;
+# the real-corpus offline gate runs when a local baseline exists.
+#
+# Emergency escape hatch (use sparingly, loudly):
+#     VOICE_OS_SKIP_EVAL_GATE=1 git push ...
+
+if [ -n "$VOICE_OS_SKIP_EVAL_GATE" ]; then
+    echo "pre-push: VOICE_OS_SKIP_EVAL_GATE set; SKIPPING the eval gate" >&2
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)" || exit 1
+cd "$repo_root" || exit 1
+
+echo "pre-push: running harness fixture tests (eval gate layer 1)..."
+if ! python3 -m pytest tests/test_harness.py -q; then
+    echo "pre-push: harness fixture tests FAILED; push blocked" >&2
+    exit 1
+fi
+
+baseline="${VOICE_OS_VAR_DIR:-var}/eval/baseline.json"
+if [ -f "$baseline" ]; then
+    echo "pre-push: running real-corpus offline eval gate (layer 2)..."
+    if ! python3 -m voice_os.harness gate; then
+        echo "pre-push: eval gate FAILED against $baseline; push blocked" >&2
+        echo "pre-push: if the change is an intentional improvement, run" >&2
+        echo "  python3 -m voice_os.harness gate --update-baseline" >&2
+        echo "and quote the before/after numbers in the PR body" >&2
+        exit 1
+    fi
+else
+    echo "pre-push: no eval baseline at $baseline; skipping layer 2" >&2
+    echo "pre-push: establish one with: python3 -m voice_os.harness gate --update-baseline" >&2
+fi
+
+exit 0
