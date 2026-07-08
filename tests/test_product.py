@@ -516,6 +516,11 @@ def test_cell_threshold_resolution():
     ) is None
     assert graph_module._cell_threshold(calibration, "sms", "peer") is None
     assert graph_module._cell_threshold(None, "chat", "peer") is None
+    # Non-finite and boolean p40 values never become thresholds: NaN
+    # survives min/max and would make the pass comparison always false.
+    for bad_p40 in (float("nan"), float("inf"), float("-inf"), True, "0.7"):
+        poisoned = {"cells": {"email|peer": {"n": 120, "p40": bad_p40}}}
+        assert graph_module._cell_threshold(poisoned, "email", "peer") is None
 
 
 def test_qa_gate_honors_calibrated_threshold():

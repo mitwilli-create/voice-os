@@ -16,6 +16,7 @@ Design: docs/callable-layer.md.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import sqlite3
 import uuid
@@ -186,7 +187,12 @@ def _cell_threshold(
     if not cell or cell.get("n", 0) < _GATE_MIN_CELL_N:
         return None
     p40 = cell.get("p40")
-    if not isinstance(p40, (int, float)):
+    # json parses NaN/Infinity by default and NaN survives min/max, which
+    # would make `fidelity >= threshold` unconditionally false; bools are
+    # ints too and must not become thresholds.
+    if isinstance(p40, bool) or not isinstance(p40, (int, float)):
+        return None
+    if not math.isfinite(p40):
         return None
     return round(
         min(max(float(p40), _GATE_THRESHOLD_FLOOR), _GATE_THRESHOLD_CEILING), 4
