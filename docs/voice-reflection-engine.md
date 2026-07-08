@@ -66,7 +66,7 @@ The Reflection Engine is a sibling of `evolution/` and reuses its skeleton end t
 
 ### Package layout
 
-```
+```text
 voice_os/reflection/
     __init__.py     lazy public surface: reflect(), pending_sessions(),
                     reflect_run_history(), consolidate(), describe_reflection_graph()
@@ -89,7 +89,7 @@ CLI: `reflect`, `reflect-status`, `reflect-proposals`, and `retract` subcommands
 
 ### The reflection graph
 
-```
+```text
 START -> capture -> measure -> reflect -> consolidate -> record -> END
 ```
 
