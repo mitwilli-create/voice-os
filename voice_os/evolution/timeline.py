@@ -32,10 +32,26 @@ def _chunks_dir(chunks_dir: str | None) -> str:
     return chunks_dir or DEFAULT_CHUNKS_DIR
 
 
+def _tier_int(chunk: dict) -> int | None:
+    """Tier as an int, accepting numeric strings; None when malformed.
+
+    Matches the defensive int(...) handling used elsewhere in the repo
+    (eval, miners) so tier-1 extraction and tier grouping never
+    silently drop a chunk whose tier arrived string-typed.
+    """
+    tier = chunk.get("tier")
+    if isinstance(tier, bool):
+        return None
+    try:
+        return int(tier)
+    except (TypeError, ValueError):
+        return None
+
+
 def _group_key(chunk: dict, group_by: str) -> str | None:
     if group_by == "tier":
-        tier = chunk.get("tier")
-        return f"tier-{tier}" if isinstance(tier, int) else None
+        tier = _tier_int(chunk)
+        return f"tier-{tier}" if tier is not None else None
     timestamp = chunk.get("provenance", {}).get("timestamp") or ""
     if group_by == "window":
         return window_key(timestamp)
@@ -114,7 +130,7 @@ def tier1_texts(chunks_dir: str | None = None) -> list[str]:
         text = chunk.get("text")
         if not isinstance(text, str) or not text:
             continue
-        if chunk.get("tier") != 1:
+        if _tier_int(chunk) != 1:
             continue
         pairs.append((str(chunk.get("hash", "")), text))
     pairs.sort()

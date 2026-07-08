@@ -42,13 +42,30 @@ def content_hash(body: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _baseline_sort_key(baseline_id: str) -> tuple[str, int]:
+    """Chronological ordering key robust to collision suffixes.
+
+    Ids are `<stamp>` or `<stamp>-<n>`; a plain lexicographic sort
+    would put `-10` before `-2`, so the suffix is compared as an
+    integer (unparseable suffixes sort after their stamp's numbered
+    siblings, deterministically by falling back to a large sentinel).
+    """
+    stamp, _, suffix = baseline_id.partition("-")
+    if not suffix:
+        return (stamp, 0)
+    try:
+        return (stamp, int(suffix))
+    except ValueError:
+        return (stamp, 1 << 30)
+
+
 def list_baselines(var_dir: str | None = None) -> list[dict]:
-    """All baseline manifests, oldest first."""
+    """All baseline manifests, oldest first (collision-suffix aware)."""
     root = baselines_dir(var_dir)
     manifests = []
     if not os.path.isdir(root):
         return manifests
-    for entry in sorted(os.listdir(root)):
+    for entry in sorted(os.listdir(root), key=_baseline_sort_key):
         manifest_path = os.path.join(root, entry, "manifest.json")
         if not os.path.isfile(manifest_path):
             continue

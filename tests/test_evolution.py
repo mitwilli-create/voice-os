@@ -185,6 +185,36 @@ def test_baseline_store_is_content_addressed(tmp_path):
     assert (snap_dir / "profile.json").is_file()
 
 
+def test_baseline_ordering_is_numeric_on_collision_suffixes(tmp_path):
+    """...Z-10 must sort after ...Z-2 (lexicographic order would not)."""
+    var_dir = str(tmp_path / "var")
+    root = Path(baseline_store.baselines_dir(var_dir))
+    stamp = "20260101T000000Z"
+    for suffix, hash_tag in (("", "a"), ("-2", "b"), ("-10", "c")):
+        baseline_id = f"{stamp}{suffix}"
+        dest = root / baseline_id
+        dest.mkdir(parents=True)
+        (dest / "profile.json").write_text(
+            json.dumps({"profile": {"n_chunks": 1}, "tag": hash_tag}),
+            encoding="utf-8",
+        )
+        (dest / "manifest.json").write_text(
+            json.dumps({
+                "baseline_id": baseline_id,
+                "content_hash": hash_tag * 4,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "n_chunks": 1,
+                "params": {},
+            }),
+            encoding="utf-8",
+        )
+    order = [m["baseline_id"] for m in baseline_store.list_baselines(var_dir)]
+    assert order == [stamp, f"{stamp}-2", f"{stamp}-10"]
+    manifest, body = baseline_store.latest_baseline(var_dir)
+    assert manifest["baseline_id"] == f"{stamp}-10"
+    assert body["tag"] == "c"
+
+
 def test_baseline_var_dir_env_override(tmp_path, monkeypatch):
     monkeypatch.setenv("VOICE_OS_VAR_DIR", str(tmp_path / "env-var"))
     assert baseline_store.baselines_dir(None).startswith(
@@ -242,6 +272,22 @@ def test_timeline_slice_by_context(tmp_path):
         chunks_dir, group_by="window", slice_by={"audience": "nobody"}
     )
     assert empty == []
+
+
+def test_tier_accepts_numeric_strings(tmp_path):
+    """String-typed tiers must not silently drop chunks (Qodo PR #14)."""
+    from voice_os.evolution import tier1_texts
+
+    chunks = _era_chunks()
+    for chunk in chunks:
+        chunk["tier"] = str(chunk["tier"])
+    chunks.append(make_chunk("malformed tier note.", tier=1))
+    chunks[-1]["tier"] = "not-a-tier"
+    chunks_dir = write_store(tmp_path, chunks)
+
+    tiers = evolution_timeline(chunks_dir, group_by="tier")
+    assert [g["group"] for g in tiers] == ["tier-1", "tier-2"]
+    assert len(tier1_texts(chunks_dir)) == 6  # malformed tier skipped
 
 
 def test_timeline_rejects_unknown_group_by(tmp_path):
@@ -467,8 +513,11 @@ def test_repo_tree_stays_clean_after_drift_run(tmp_path):
     dirty = [
         line
         for line in proc.stdout.splitlines()
+        # Runtime-data names only; "evolution/baselines/" keeps the
+        # trailing slash so the SOURCE file baselines.py (which may be
+        # legitimately modified in a working tree) never matches.
         if "evolution.sqlite" in line
-        or "evolution/baselines" in line
+        or "evolution/baselines/" in line
         or "evolution_flags.json" in line
     ]
     assert dirty == [], f"drift run leaked data into the repo tree: {dirty}"
