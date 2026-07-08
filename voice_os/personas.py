@@ -26,11 +26,33 @@ _ADVERSARIAL_SYSTEM = (
 )
 
 
-def _profile_block(target: dict[str, float], signals: list[str], banned: list[str]) -> str:
+def _profile_block(
+    target: dict[str, float],
+    signals: list[str],
+    banned: list[str],
+    exemplars: list[dict] | None = None,
+    length_target_words: int | None = None,
+) -> str:
     lines = ["Target voice profile (0.0 to 1.0 per axis):"]
     lines += [f"  {axis}: {target[axis]:.2f}" for axis in AXES]
     if banned:
         lines.append("Banned phrases (must not appear): " + "; ".join(banned))
+    if exemplars:
+        lines.append("Examples of this author's real messages in this context:")
+        for index, exemplar in enumerate(exemplars, 1):
+            text = str(exemplar.get("text", "")).strip()
+            if text:
+                # Exemplar content is data, not instructions: every line
+                # is nested under its Example header so embedded newlines
+                # or prompt-like markers cannot alter the block structure.
+                lines.append(f"  Example {index}:")
+                lines += [f"    {raw}" for raw in text.splitlines()]
+    if length_target_words:
+        lines.append(
+            f"Length: the input is {length_target_words} words. Keep the "
+            f"revision close to {length_target_words} words; never exceed "
+            "it by more than about 40 percent."
+        )
     if signals:
         lines.append("Revision signals from the QA gate:")
         lines += [f"  - {s}" for s in signals]
@@ -48,10 +70,15 @@ class GenerativePersona:
     """Revises a draft toward the target profile."""
 
     def revise(self, draft: str, target: dict[str, float], banned: list[str],
-               signals: list[str]) -> PersonaResult:
+               signals: list[str], exemplars: list[dict] | None = None,
+               length_target_words: int | None = None) -> PersonaResult:
         from . import llm
 
-        prompt = f"{_profile_block(target, signals, banned)}\n\nDraft:\n{draft}"
+        block = _profile_block(
+            target, signals, banned,
+            exemplars=exemplars, length_target_words=length_target_words,
+        )
+        prompt = f"{block}\n\nDraft:\n{draft}"
         revised = llm.complete(_GENERATIVE_SYSTEM, prompt)
         if revised:
             # Live models emit em dashes (measured at 0.444 of drafts in

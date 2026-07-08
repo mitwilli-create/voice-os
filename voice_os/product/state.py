@@ -41,6 +41,10 @@ class VoiceState(TypedDict):
     tone_std: dict | None
     banned: list[str]
     guidance: list[str]
+    # held-in exemplar chunks ({id, text, tier, fit}) feeding live persona
+    # prompts only; holdout-filtered upstream so scoring never sees them.
+    # Exemplar text is personal data and lands in checkpoints under var/.
+    exemplars: list[dict]
     kb_meta: dict
     # reproducibility metadata (docs/determinism.md hardening items 2-3):
     # voice_os version, mined artifact versions, KB bundle hash, corpus
@@ -103,6 +107,7 @@ def initial_state(
         "tone_std": None,
         "banned": [],
         "guidance": [],
+        "exemplars": [],
         "kb_meta": {},
         "provenance": {},
         "current_draft": "",

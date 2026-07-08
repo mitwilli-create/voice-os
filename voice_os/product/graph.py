@@ -161,6 +161,23 @@ def _stamp_live_model(state: VoiceState, mode: str) -> dict:
     return {"provenance": provenance}
 
 
+# Per-exemplar word budget: chunk text is unbounded (document chunks run
+# to 400 words), so state and prompt payloads are capped here rather than
+# trusting every adapter's chunking policy.
+_EXEMPLAR_MAX_WORDS = 120
+
+
+def _bounded_exemplar(exemplar: dict) -> dict:
+    """A JSON-safe copy with the text capped at _EXEMPLAR_MAX_WORDS."""
+    bounded = dict(exemplar)
+    words = str(bounded.get("text", "")).split()
+    if len(words) > _EXEMPLAR_MAX_WORDS:
+        bounded["text"] = " ".join(words[:_EXEMPLAR_MAX_WORDS])
+        bounded["text_truncated"] = True
+        bounded["text_words_original"] = len(words)
+    return bounded
+
+
 def new_run_id() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"run-{stamp}-{uuid.uuid4().hex[:8]}"
@@ -239,12 +256,21 @@ def prepare(state: VoiceState) -> dict:
         "tone_std": dict(q.tone.std) if q.tone else None,
         "banned": list(q.banned),
         "guidance": list(q.guidance),
+        # Top exemplars only: enough voice evidence for the live prompt
+        # without dominating it (personal data; see state.py note).
+        "exemplars": [_bounded_exemplar(e) for e in q.exemplars[:3]],
         "kb_meta": kb_meta,
         "provenance": provenance,
         "current_draft": state["input_text"],
         "revision_count": 0,
         "trace_notes": notes,
     }
+
+
+def _length_target(state: VoiceState) -> int | None:
+    """The input's word count: the brief derives from the real message, so
+    its length is the author's length for the situation."""
+    return len(state["input_text"].split()) or None
 
 
 def generate(state: VoiceState) -> dict:
@@ -255,6 +281,8 @@ def generate(state: VoiceState) -> dict:
         state["target_profile"],
         state["banned"],
         list(state["guidance"]),
+        exemplars=state.get("exemplars") or None,
+        length_target_words=_length_target(state),
     )
     return {
         "current_draft": result.text,
@@ -313,6 +341,20 @@ def qa_gate(state: VoiceState) -> dict:
     else:
         decision = "revise"
 
+    # Length inflation signal (node-level, advisory: it never changes the
+    # gate decision). Live drafts measured 1.2x-3.1x the input length and
+    # length_ratio correlated -0.60 with the judge's same_author score, so
+    # overruns feed the next revision cycle as an explicit signal.
+    revision_signals = list(result.revision_signals)
+    input_words = len(state["input_text"].split())
+    draft_words = len(draft_text.split())
+    if input_words and draft_words > 1.4 * input_words:
+        revision_signals.append(
+            f"draft runs {draft_words} words against a {input_words}-word "
+            f"input ({draft_words / input_words:.1f}x); cut it to about "
+            f"{input_words} words"
+        )
+
     return {
         "qa_decision": decision,
         "fidelity_scores": {
@@ -320,7 +362,7 @@ def qa_gate(state: VoiceState) -> dict:
             "per_axis": result.per_axis,
         },
         "banned_hits": list(result.banned_hits),
-        "revision_signals": list(result.revision_signals),
+        "revision_signals": revision_signals,
         "trace_notes": [
             f"qa_gate: gate={result.decision} -> {decision} "
             f"(fidelity {result.fidelity:.3f}, revision {state['revision_count']})"
@@ -340,7 +382,10 @@ def revise(state: VoiceState) -> dict:
     )
     persona = GenerativePersona()
     result = persona.revise(
-        state["current_draft"], state["target_profile"], state["banned"], signals
+        state["current_draft"], state["target_profile"], state["banned"],
+        signals,
+        exemplars=state.get("exemplars") or None,
+        length_target_words=_length_target(state),
     )
     return {
         "current_draft": result.text,

@@ -156,6 +156,23 @@ class TestEmDashScrub(unittest.TestCase):
         self.assertNotIn("—", result.text)
 
 
+class TestProfileBlockStability(unittest.TestCase):
+    """The exemplar/length extensions are additive: legacy callers that
+    pass neither must get the exact pre-extension prompt, keeping the
+    locked run_cycles/run_pipeline surfaces byte-stable."""
+
+    def test_prompt_unchanged_without_exemplars_or_length(self):
+        from voice_os.personas import _profile_block
+
+        target = {axis: 0.5 for axis in AXES}
+        block = _profile_block(target, ["a signal"], ["banned phrase"])
+        self.assertNotIn("Examples of this author's", block)
+        self.assertNotIn("Length:", block)
+        expected_head = "Target voice profile (0.0 to 1.0 per axis):"
+        self.assertTrue(block.startswith(expected_head))
+        self.assertIn("Revision signals from the QA gate:", block)
+
+
 class TestPipeline(unittest.TestCase):
     def test_slop_draft_cycles_and_strips_banned_phrases(self):
         result = run_pipeline(CORPUS, DRAFT_SLOP, banned_path=BANNED)
