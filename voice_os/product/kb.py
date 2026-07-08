@@ -254,6 +254,26 @@ def ensure_snapshot(
 # whole KB section so it informs the live prompt without dominating it.
 KB_GUIDANCE_MAX_WORDS = 220
 KB_GUIDANCE_MAX_ITEMS = 12
+# Per-line caps: every guidance item is normalized to a single rendered
+# line before budgeting, so KB values with embedded newlines cannot turn
+# one "bounded" item into many prompt lines, and the character cap stops
+# pathological no-space tokens that a word count alone would miss.
+KB_GUIDANCE_LINE_MAX_WORDS = 40
+KB_GUIDANCE_LINE_MAX_CHARS = 400
+
+
+def _bounded_line(text: str) -> str:
+    """One rendered prompt line from a candidate guidance string.
+
+    Collapses all internal whitespace (including newlines) to single
+    spaces, then caps the line at KB_GUIDANCE_LINE_MAX_WORDS words and
+    KB_GUIDANCE_LINE_MAX_CHARS characters. The budget in
+    distill_kb_guidance counts exactly the text that renders, so the
+    bounds hold no matter what the KB file contains.
+    """
+    words = str(text).split()
+    line = " ".join(words[:KB_GUIDANCE_LINE_MAX_WORDS])
+    return line[:KB_GUIDANCE_LINE_MAX_CHARS]
 
 
 def _dig(mapping: dict, *keys: str):
@@ -298,8 +318,11 @@ def distill_kb_guidance(
     analysis + LinkedIn voice notes; field rationale in docs/kb-fusion.md)
     and renders each as one plain-English line. Deterministic for a given
     bundle; returns [] when the compact KB is absent or has none of the
-    expected sections. The result is capped at max_words total (and
-    KB_GUIDANCE_MAX_ITEMS lines) so the persona prompt stays bounded.
+    expected sections. Every item is normalized to a single rendered line
+    (whitespace collapsed, per-line word and character caps; see
+    _bounded_line) and the result is capped at max_words total and
+    KB_GUIDANCE_MAX_ITEMS lines, so the persona prompt stays bounded
+    whatever the KB file contains.
     """
     compact = bundle.get("compact") if isinstance(bundle, dict) else None
     if not isinstance(compact, dict):
@@ -369,7 +392,10 @@ def distill_kb_guidance(
 
     guidance: list[str] = []
     total_words = 0
-    for line in candidates[:KB_GUIDANCE_MAX_ITEMS]:
+    for candidate in candidates[:KB_GUIDANCE_MAX_ITEMS]:
+        line = _bounded_line(candidate)
+        if not line:
+            continue
         words = len(line.split())
         if total_words + words > max_words:
             break

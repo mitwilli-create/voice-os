@@ -64,13 +64,21 @@ mistyped sections are skipped, and an absent KB yields an empty list
 Same bounding idea as the per-exemplar 120-word cap in PR #18, applied
 to the whole KB section:
 
-- `KB_GUIDANCE_MAX_WORDS = 220` total words; accumulation stops before
-  the line that would overflow.
+- Each item is first normalized to a single rendered line: internal
+  whitespace (including newlines) collapses to single spaces, then the
+  line is capped at `KB_GUIDANCE_LINE_MAX_WORDS = 40` words and
+  `KB_GUIDANCE_LINE_MAX_CHARS = 400` characters (the character cap
+  stops pathological no-space tokens a word count alone would miss).
+- `KB_GUIDANCE_MAX_WORDS = 220` total words, counted on the normalized
+  text; accumulation stops before the line that would overflow.
 - `KB_GUIDANCE_MAX_ITEMS = 12` lines.
 
-The real compact KB currently distills to 7 lines and 92 words, well
-inside the cap; the cap exists so future KB growth cannot bloat prompts
-or checkpoints.
+Budgeting happens on exactly the text that renders: one item is one
+prompt line through `_profile_block`, so KB strings with embedded
+newlines or giant tokens cannot defeat the bound (Qodo round 1
+finding). The real compact KB currently distills to 7 lines and 92
+words, well inside the caps; they exist so future KB growth or a
+malformed KB file cannot bloat prompts or checkpoints.
 
 ## Plumbing (extension pattern from PR #18)
 

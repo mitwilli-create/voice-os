@@ -354,6 +354,47 @@ def test_distill_kb_guidance_is_bounded(tmp_path):
     assert len(small) < len(guidance)
 
 
+def test_kb_guidance_bounds_hold_against_hostile_kb():
+    """Embedded newlines and no-space tokens in KB strings must not defeat
+    the budget: items are normalized to single rendered lines and capped
+    per line in words AND characters, so the counted text is exactly the
+    text that reaches the prompt."""
+    from voice_os.axes import AXES
+    from voice_os.personas import _profile_block
+
+    hostile = {
+        "compact": {
+            "linkedin_voice_notes": {
+                "social_media_patterns": {
+                    # 200 newline-separated words: would render as 200
+                    # prompt lines without normalization.
+                    "post_style": "evil\n" * 200,
+                },
+                "networking_message_patterns": {
+                    # One 5000-char no-space token: 1 "word", huge line.
+                    "greeting": "y" * 5000,
+                },
+            },
+        },
+    }
+    guidance = kb_module.distill_kb_guidance(hostile)
+    assert guidance
+    for line in guidance:
+        assert "\n" not in line
+        assert len(line.split()) <= kb_module.KB_GUIDANCE_LINE_MAX_WORDS
+        assert len(line) <= kb_module.KB_GUIDANCE_LINE_MAX_CHARS
+    total_words = sum(len(line.split()) for line in guidance)
+    assert total_words <= kb_module.KB_GUIDANCE_MAX_WORDS
+
+    # Through _profile_block, each item renders as exactly one line under
+    # the section header, so the item count stays meaningful end to end.
+    target = {axis: 0.5 for axis in AXES}
+    base = _profile_block(target, [], [])
+    block = _profile_block(target, [], [], kb_guidance=guidance)
+    added = len(block.splitlines()) - len(base.splitlines())
+    assert added == 1 + len(guidance)
+
+
 # ------------------------------------------------------------------ graph
 
 
