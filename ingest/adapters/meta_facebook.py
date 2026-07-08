@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Iterator
 
@@ -16,6 +17,13 @@ from ..normalize import decode_meta_text, is_self, ms_to_iso, s_to_iso
 from .base import RawRecord, SourceAdapter
 
 _SKIP_MARKERS = ("sent an attachment", "started a call")
+
+# archived_stories_v2 stamps every item with an auto-generated archive
+# notice instead of authored text ("A photo from X's story was added to
+# his archive. Shared from Instagram."); never corpus material.
+_ARCHIVE_NOTICE = re.compile(
+    r"^A (photo|video) from .* story was added to \S+ archive\."
+)
 
 
 def _load_json(path: Path):
@@ -152,10 +160,13 @@ class FacebookAdapter(SourceAdapter):
             data = _load_json(json_file)
             if not data:
                 continue
-            story_list = data if isinstance(data, list) else data.get("stories", [])
+            if isinstance(data, list):
+                story_list = data
+            else:
+                story_list = data.get("stories", data.get("archived_stories_v2", []))
             for story in story_list:
                 content = decode_meta_text(story.get("title", story.get("text", "")))
-                if not content:
+                if not content or _ARCHIVE_NOTICE.match(content):
                     continue
                 yield RawRecord(
                     text=content,

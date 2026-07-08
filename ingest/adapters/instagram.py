@@ -26,19 +26,20 @@ def _load_json(path: Path):
 
 def _caption_and_ts(item: dict) -> tuple[str, object]:
     """Captions hide in media[].title, title, or caption depending on the
-    export vintage."""
+    export vintage. Album posts carry empty per-media titles with the
+    real caption on the item, so only a non-empty media title wins."""
     for media_item in item.get("media", []):
-        if "title" in media_item:
+        if media_item.get("title"):
             return (
                 decode_meta_text(media_item["title"]),
-                media_item.get("creation_timestamp"),
+                media_item.get("creation_timestamp", item.get("creation_timestamp")),
             )
-    if "title" in item:
+    if item.get("title"):
         return (
             decode_meta_text(item["title"]),
             item.get("creation_timestamp", item.get("taken_at")),
         )
-    if "caption" in item:
+    if item.get("caption"):
         return (
             decode_meta_text(item["caption"]),
             item.get("creation_timestamp", item.get("taken_at")),
@@ -72,13 +73,18 @@ class InstagramAdapter(SourceAdapter):
         for candidate in (
             base_path / "content",
             base_path / "your_instagram_activity" / "content",
+            base_path / "your_instagram_activity" / "media",
+            base_path / "your_instagram_activity" / "posts",
             base_path / "media" / "posts",
         ):
             if candidate.exists():
                 for f in sorted(candidate.glob(pattern)):
                     seen[f] = None
+        # 2026 exports moved content JSON under your_instagram_activity/media;
+        # accept any of the content-carrying directory names, which still
+        # excludes lookalikes such as logged_information insights.
         for f in sorted(base_path.rglob(pattern)):
-            if "content" in f.parts or "posts" in f.parts:
+            if {"content", "posts", "media"} & set(f.parts[:-1]):
                 seen[f] = None
         return list(seen)
 
@@ -120,7 +126,10 @@ class InstagramAdapter(SourceAdapter):
             if isinstance(data, dict):
                 comment_list = data.get(
                     "comments_media_comments",
-                    data.get("post_comments", data.get("comments", [])),
+                    data.get(
+                        "comments_reels_comments",
+                        data.get("post_comments", data.get("comments", [])),
+                    ),
                 )
             else:
                 comment_list = data
@@ -131,6 +140,16 @@ class InstagramAdapter(SourceAdapter):
                     content = decode_meta_text(item.get("value", ""))
                     ts = item.get("timestamp")
                     break
+                if not content:
+                    # 2026 exports carry the comment in string_map_data
+                    # keyed "Comment", with the epoch under "Time".
+                    string_map = comment.get("string_map_data", {})
+                    entry = string_map.get("Comment")
+                    if isinstance(entry, dict):
+                        content = decode_meta_text(entry.get("value", ""))
+                        time_entry = string_map.get("Time")
+                        if isinstance(time_entry, dict):
+                            ts = time_entry.get("timestamp")
                 if not content and "comment" in comment:
                     content = decode_meta_text(comment["comment"])
                     ts = comment.get("timestamp")
