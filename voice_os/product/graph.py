@@ -34,6 +34,7 @@ from ..personas import AdversarialPersona, GenerativePersona
 from ..qa import find_banned, gate_extended
 from ..tone import ToneProfile, derive_metrics, tone_signals
 from . import kb as kb_module
+from .fusion import distill_pattern_guidance
 from .kb import REPO_ROOT
 from .state import VoiceState
 
@@ -269,6 +270,13 @@ def prepare(state: VoiceState) -> dict:
     # the offline persona ignores it either way.
     kb_guidance = kb_module.distill_kb_guidance(bundle)
 
+    # Same fusion idea for the mined Tier 1 pattern profile
+    # (docs/pattern-fusion.md); [] when the evolution_flags artifact is
+    # absent or predates the profile field.
+    pattern_guidance = distill_pattern_guidance(
+        (model.mined.evolution_flags or {}).get("pattern_profile")
+    )
+
     notes = [
         f"prepare: context resolved (sources: {q.sources})",
         kb_note,
@@ -283,6 +291,12 @@ def prepare(state: VoiceState) -> dict:
         notes.append(
             f"prepare: kb guidance fused ({len(kb_guidance)} patterns, "
             f"{guidance_words} words)"
+        )
+    if pattern_guidance:
+        pattern_words = sum(len(line.split()) for line in pattern_guidance)
+        notes.append(
+            f"prepare: pattern guidance fused ({len(pattern_guidance)} "
+            f"patterns, {pattern_words} words)"
         )
     drift_flags = q.meta.get("drift_flags") or []
     if drift_flags:
@@ -314,6 +328,7 @@ def prepare(state: VoiceState) -> dict:
         "gate_threshold": gate_threshold,
         "kb_guidance": kb_guidance,
         "kb_meta": kb_meta,
+        "pattern_guidance": pattern_guidance,
         "provenance": provenance,
         "current_draft": state["input_text"],
         "revision_count": 0,
@@ -338,6 +353,7 @@ def generate(state: VoiceState) -> dict:
         exemplars=state.get("exemplars") or None,
         length_target_words=_length_target(state),
         kb_guidance=state.get("kb_guidance") or None,
+        pattern_guidance=state.get("pattern_guidance") or None,
     )
     return {
         "current_draft": result.text,
@@ -446,6 +462,7 @@ def revise(state: VoiceState) -> dict:
         exemplars=state.get("exemplars") or None,
         length_target_words=_length_target(state),
         kb_guidance=state.get("kb_guidance") or None,
+        pattern_guidance=state.get("pattern_guidance") or None,
     )
     return {
         "current_draft": result.text,

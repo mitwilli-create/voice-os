@@ -53,6 +53,11 @@ class VoiceState(TypedDict):
     # from personal KB content and lands in checkpoints under var/.
     kb_guidance: list[str]
     kb_meta: dict
+    # bounded prompt-ready statements distilled from the mined Tier 1
+    # pattern profile in the evolution_flags artifact
+    # (docs/pattern-fusion.md); live persona prompts only. Lexicon forms
+    # and numbers, no free vocabulary.
+    pattern_guidance: list[str]
     # reproducibility metadata (docs/determinism.md hardening items 2-3):
     # voice_os version, mined artifact versions, KB bundle hash, corpus
     # content identity, and the live model id when any persona ran live
@@ -118,6 +123,7 @@ def initial_state(
         "gate_threshold": None,
         "kb_guidance": [],
         "kb_meta": {},
+        "pattern_guidance": [],
         "provenance": {},
         "current_draft": "",
         "critique_feedback": "",

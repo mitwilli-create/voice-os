@@ -209,6 +209,11 @@ def flag(state: DriftState) -> dict:
                 "fading": diff.get("fading", []),
                 "shifted": diff.get("shifted", []),
                 "sentence_shift": diff.get("sentence_shift"),
+                # The current Tier 1 profile itself, so generation can
+                # fuse it (docs/pattern-fusion.md). Lexicon-bucketed
+                # forms and numbers only; names never enter the profile
+                # (see patterns.py).
+                "pattern_profile": dict(state.get("current_profile") or {}),
             },
         }
         with open(artifact_path, "w", encoding="utf-8") as f:

@@ -442,9 +442,14 @@ def test_drift_run_establishes_then_detects(tmp_path):
     assert "yo" in fading
     assert third["flags"]
 
-    # The mined artifact landed and loads through the standard loader.
+    # The mined artifact landed and loads through the standard loader,
+    # carrying the current Tier 1 profile for generation-side fusion
+    # (docs/pattern-fusion.md).
     artifacts = load_artifacts(mined_dir)
     assert artifacts.evolution_flags["flags"] == third["flags"]
+    profile = artifacts.evolution_flags["pattern_profile"]
+    assert profile["n_chunks"] == 6
+    assert profile["greetings"].get("hiya") == 1.0
 
     # Baseline anchor did NOT move (update_baseline not passed).
     assert len(baseline_store.list_baselines(var_dir)) == 1
