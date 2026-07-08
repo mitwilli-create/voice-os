@@ -157,10 +157,10 @@ class TestEmDashScrub(unittest.TestCase):
 
 
 class TestProfileBlockStability(unittest.TestCase):
-    """The exemplar/length/kb-guidance extensions are additive: legacy
-    callers that pass none of them must get the exact pre-extension
-    prompt, keeping the locked run_cycles/run_pipeline surfaces
-    byte-stable."""
+    """The exemplar/length/kb-guidance/pattern-guidance extensions are
+    additive: legacy callers that pass none of them must get the exact
+    pre-extension prompt, keeping the locked run_cycles/run_pipeline
+    surfaces byte-stable."""
 
     def test_prompt_unchanged_without_optional_sections(self):
         from voice_os.personas import _profile_block
@@ -170,6 +170,7 @@ class TestProfileBlockStability(unittest.TestCase):
         self.assertNotIn("Examples of this author's", block)
         self.assertNotIn("Length:", block)
         self.assertNotIn("knowledge base", block)
+        self.assertNotIn("recent writing", block)
         expected_head = "Target voice profile (0.0 to 1.0 per axis):"
         self.assertTrue(block.startswith(expected_head))
         self.assertIn("Revision signals from the QA gate:", block)

@@ -341,6 +341,14 @@ def test_evolution_pure_surfaces_double_run(tmp_path):
         lambda: check_drift(chunks_dir, str(tmp_path / "var-none"))
     )
 
+    # Pattern-profile fusion (docs/pattern-fusion.md) is a pure function
+    # of the profile dict. Inflate n_chunks past the support floor so
+    # the distiller actually renders on the small synthetic profile.
+    from voice_os.product.fusion import distill_pattern_guidance
+
+    fused_profile = dict(extract_pattern_profile(texts), n_chunks=1000)
+    assert_double_run(lambda: distill_pattern_guidance(fused_profile))
+
 
 def _normalize_drift_envelope(envelope: dict) -> dict:
     import re as _re
