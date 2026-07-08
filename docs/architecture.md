@@ -1,4 +1,6 @@
-# Voice OS: Architecture
+# Voice OS: Architecture (legacy design, January 2026)
+
+> **Status: historical.** This documents the original claude.ai knowledge-base iteration of Voice OS. The system has since been reimplemented as the Python engine in this repo; its compact KB is consumed as a versioned input (see docs/callable-layer.md and docs/kb-fusion.md), and its register-calibration dimensions are re-expressed as deltas on the canonical six axes (voice_os/axes.py). For the current architecture, start at the README's architecture table and the per-module design docs in docs/. The roadmap phases below describe the legacy system and are superseded by the shipped engine.
 
 A Claude-powered system that generates written output indistinguishable from what I'd write myself. Built on 6.9M+ words of corpus data, six psychological frameworks, and two decades of voice evolution.
 
