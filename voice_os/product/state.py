@@ -48,6 +48,10 @@ class VoiceState(TypedDict):
     # per-cell calibrated gate threshold from the gate_calibration mined
     # artifact; None means the hand default (qa.PASS_THRESHOLD) applies.
     gate_threshold: float | None
+    # bounded prompt-ready voice-pattern statements distilled from the
+    # compact KB (docs/kb-fusion.md); live persona prompts only. Derived
+    # from personal KB content and lands in checkpoints under var/.
+    kb_guidance: list[str]
     kb_meta: dict
     # reproducibility metadata (docs/determinism.md hardening items 2-3):
     # voice_os version, mined artifact versions, KB bundle hash, corpus
@@ -112,6 +116,7 @@ def initial_state(
         "guidance": [],
         "exemplars": [],
         "gate_threshold": None,
+        "kb_guidance": [],
         "kb_meta": {},
         "provenance": {},
         "current_draft": "",

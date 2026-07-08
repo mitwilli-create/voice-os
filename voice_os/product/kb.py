@@ -1,18 +1,24 @@
-"""KB loading and snapshot versioning for the callable layer.
+"""KB loading, snapshot versioning, and guidance distillation for the
+callable layer.
 
 Loads the legacy claude.ai Projects KB (compact JSON + system prompt)
 from the gitignored sources directory, hashes the content, and keeps
 content-addressed snapshots under the gitignored var/ directory so any
 historical run can be traced to the exact KB it saw.
+distill_kb_guidance() turns the loaded compact KB into a bounded list of
+prompt-ready voice-pattern statements (docs/kb-fusion.md).
 
 The loader never invents content: a missing directory or file yields a
 bundle with status "absent" and the caller surfaces that in trace notes.
+The distiller is schema-tolerant the same way: missing sections are
+skipped, never fabricated.
 
 Privacy: KB files and snapshots are personal data. Snapshot destinations
 live under var/ which is gitignored; nothing here writes inside tracked
-paths.
+paths. Distilled guidance derived from KB content enters live persona
+prompts and run checkpoints under var/ (docs/kb-fusion.md).
 
-Stdlib only. Design: docs/callable-layer.md.
+Stdlib only. Design: docs/callable-layer.md, docs/kb-fusion.md.
 """
 
 from __future__ import annotations
@@ -239,3 +245,160 @@ def ensure_snapshot(
         if manifest.get("bundle_hash") == bundle["bundle_hash"]:
             return manifest
     return snapshot_kb(var_dir=var_dir, bundle=bundle)
+
+
+# --------------------------------------------------------- guidance fusion
+
+# Total word budget for the distilled guidance: the same bounding idea as
+# the per-exemplar cap in graph.py (_EXEMPLAR_MAX_WORDS), applied to the
+# whole KB section so it informs the live prompt without dominating it.
+KB_GUIDANCE_MAX_WORDS = 220
+KB_GUIDANCE_MAX_ITEMS = 12
+# Per-line caps: every guidance item is normalized to a single rendered
+# line before budgeting, so KB values with embedded newlines cannot turn
+# one "bounded" item into many prompt lines, and the character cap stops
+# pathological no-space tokens that a word count alone would miss.
+KB_GUIDANCE_LINE_MAX_WORDS = 40
+KB_GUIDANCE_LINE_MAX_CHARS = 400
+
+
+def _bounded_line(text: str) -> str:
+    """One rendered prompt line from a candidate guidance string.
+
+    Collapses all internal whitespace (including newlines) to single
+    spaces, then caps the line at KB_GUIDANCE_LINE_MAX_WORDS words and
+    KB_GUIDANCE_LINE_MAX_CHARS characters. The budget in
+    distill_kb_guidance counts exactly the text that renders, so the
+    bounds hold no matter what the KB file contains.
+    """
+    words = str(text).split()
+    line = " ".join(words[:KB_GUIDANCE_LINE_MAX_WORDS])
+    return line[:KB_GUIDANCE_LINE_MAX_CHARS]
+
+
+def _dig(mapping: dict, *keys: str):
+    """Nested dict lookup that returns None on any missing/mistyped hop."""
+    node = mapping
+    for key in keys:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    return node
+
+
+def _top_keys(counter, limit: int = 3) -> list[str]:
+    """Highest-count keys of a pattern-frequency dict, deterministic order
+    (count descending, then name)."""
+    if not isinstance(counter, dict):
+        return []
+    items = [
+        (str(name), value)
+        for name, value in counter.items()
+        if isinstance(value, (int, float)) and value > 0
+    ]
+    items.sort(key=lambda pair: (-pair[1], pair[0]))
+    return [name for name, _ in items[:limit]]
+
+
+def _pct_parts(source: dict, fields: tuple[tuple[str, str], ...]) -> list[str]:
+    parts = []
+    for key, label in fields:
+        value = source.get(key)
+        if isinstance(value, (int, float)):
+            parts.append(f"{label} in about {round(value)} percent")
+    return parts
+
+
+def distill_kb_guidance(
+    bundle: dict, max_words: int = KB_GUIDANCE_MAX_WORDS
+) -> list[str]:
+    """Bounded, prompt-ready voice-pattern statements from the compact KB.
+
+    Reads only the highest-signal, current-voice fields (tier 1 pattern
+    analysis + LinkedIn voice notes; field rationale in docs/kb-fusion.md)
+    and renders each as one plain-English line. Deterministic for a given
+    bundle; returns [] when the compact KB is absent or has none of the
+    expected sections. Every item is normalized to a single rendered line
+    (whitespace collapsed, per-line word and character caps; see
+    _bounded_line) and the result is capped at max_words total and
+    KB_GUIDANCE_MAX_ITEMS lines, so the persona prompt stays bounded
+    whatever the KB file contains.
+    """
+    compact = bundle.get("compact") if isinstance(bundle, dict) else None
+    if not isinstance(compact, dict):
+        return []
+
+    candidates: list[str] = []
+
+    email = _dig(compact, "pattern_analysis_by_tier", "tier_1_current", "email")
+    if isinstance(email, dict):
+        greetings = _top_keys(email.get("greetings"))
+        if greetings:
+            candidates.append(
+                "Email greetings the author actually uses, most common "
+                "first: " + "; ".join(greetings)
+            )
+        closings = _top_keys(email.get("closings"))
+        if closings:
+            candidates.append(
+                "Email closings, most common first: " + "; ".join(closings)
+            )
+        structure = email.get("structure")
+        if isinstance(structure, dict):
+            parts = _pct_parts(structure, (
+                ("bullet_usage_pct", "bullet lists"),
+                ("bold_usage_pct", "bold emphasis"),
+                ("tldr_usage_pct", "a TLDR opener"),
+            ))
+            if parts:
+                candidates.append(
+                    "Email structure: " + "; ".join(parts) + " of emails."
+                )
+        formality = email.get("formality")
+        if isinstance(formality, dict):
+            contraction = formality.get("contraction_usage_pct")
+            if isinstance(contraction, (int, float)):
+                candidates.append(
+                    f"Contractions appear in about {round(contraction)} "
+                    "percent of emails."
+                )
+
+    linkedin = _dig(
+        compact, "pattern_analysis_by_tier", "tier_1_current", "linkedin"
+    )
+    if isinstance(linkedin, dict):
+        parts = _pct_parts(linkedin, (
+            ("exclamation_usage_pct", "exclamation marks"),
+            ("question_usage_pct", "questions"),
+            ("emoji_usage_pct", "emoji"),
+        ))
+        if parts:
+            candidates.append("LinkedIn posts: " + "; ".join(parts) + ".")
+
+    post_style = _dig(
+        compact, "linkedin_voice_notes", "social_media_patterns", "post_style"
+    )
+    if isinstance(post_style, str) and post_style.strip():
+        candidates.append("LinkedIn post style: " + post_style.strip())
+
+    greeting = _dig(
+        compact,
+        "linkedin_voice_notes",
+        "networking_message_patterns",
+        "greeting",
+    )
+    if isinstance(greeting, str) and greeting.strip():
+        candidates.append("LinkedIn networking greeting: " + greeting.strip())
+
+    guidance: list[str] = []
+    total_words = 0
+    for candidate in candidates[:KB_GUIDANCE_MAX_ITEMS]:
+        line = _bounded_line(candidate)
+        if not line:
+            continue
+        words = len(line.split())
+        if total_words + words > max_words:
+            break
+        guidance.append(line)
+        total_words += words
+    return guidance

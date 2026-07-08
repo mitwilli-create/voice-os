@@ -264,6 +264,11 @@ def prepare(state: VoiceState) -> dict:
         model.mined.gate_calibration, state["channel"], state["audience"]
     )
 
+    # Bounded, prompt-ready voice patterns distilled from the compact KB
+    # (docs/kb-fusion.md); [] when the KB is absent or pattern-free, and
+    # the offline persona ignores it either way.
+    kb_guidance = kb_module.distill_kb_guidance(bundle)
+
     notes = [
         f"prepare: context resolved (sources: {q.sources})",
         kb_note,
@@ -272,6 +277,12 @@ def prepare(state: VoiceState) -> dict:
         notes.append(
             f"prepare: calibrated gate threshold {gate_threshold:.4f} "
             f"for {state['channel']}|{state['audience']}"
+        )
+    if kb_guidance:
+        guidance_words = sum(len(line.split()) for line in kb_guidance)
+        notes.append(
+            f"prepare: kb guidance fused ({len(kb_guidance)} patterns, "
+            f"{guidance_words} words)"
         )
     drift_flags = q.meta.get("drift_flags") or []
     if drift_flags:
@@ -301,6 +312,7 @@ def prepare(state: VoiceState) -> dict:
         # without dominating it (personal data; see state.py note).
         "exemplars": [_bounded_exemplar(e) for e in q.exemplars[:3]],
         "gate_threshold": gate_threshold,
+        "kb_guidance": kb_guidance,
         "kb_meta": kb_meta,
         "provenance": provenance,
         "current_draft": state["input_text"],
@@ -325,6 +337,7 @@ def generate(state: VoiceState) -> dict:
         list(state["guidance"]),
         exemplars=state.get("exemplars") or None,
         length_target_words=_length_target(state),
+        kb_guidance=state.get("kb_guidance") or None,
     )
     return {
         "current_draft": result.text,
@@ -432,6 +445,7 @@ def revise(state: VoiceState) -> dict:
         signals,
         exemplars=state.get("exemplars") or None,
         length_target_words=_length_target(state),
+        kb_guidance=state.get("kb_guidance") or None,
     )
     return {
         "current_draft": result.text,
