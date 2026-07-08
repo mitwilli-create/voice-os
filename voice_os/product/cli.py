@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import describe_graph, draft, run_history
@@ -74,6 +75,24 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _emit(text: str) -> None:
+    """Print to stdout, tolerating a consumer that closed the pipe.
+
+    A downstream `head` or broken pipe must not turn a finished draft
+    into a spurious exit 2: swallow BrokenPipeError and point stdout at
+    devnull so interpreter shutdown does not raise it again.
+    """
+    try:
+        print(text)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
 def _read_text(args: argparse.Namespace) -> str:
     if args.file is not None:
         with open(args.file, encoding="utf-8") as handle:
@@ -101,24 +120,29 @@ def _cmd_draft(args: argparse.Namespace) -> int:
         var_dir=args.var_dir,
     )
     if args.text_only:
-        print(result["output_text"])
+        _emit(result["output_text"])
     else:
-        print(json.dumps(result, indent=2))
+        _emit(json.dumps(result, indent=2))
     return 0 if result["decision"] == "pass" else 1
 
 
 def _cmd_history(args: argparse.Namespace) -> int:
-    print(json.dumps(run_history(args.run_id, var_dir=args.var_dir), indent=2))
+    _emit(json.dumps(run_history(args.run_id, var_dir=args.var_dir), indent=2))
     return 0
 
 
 def _cmd_graph() -> int:
-    print(describe_graph())
+    _emit(describe_graph())
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    try:
+        args = _build_parser().parse_args(argv)
+    except SystemExit as exc:
+        # argparse exits for usage errors (2) and --help (0); keep the
+        # main(argv) -> int contract for programmatic callers.
+        return exc.code if isinstance(exc.code, int) else 2
     try:
         if args.command == "draft":
             return _cmd_draft(args)

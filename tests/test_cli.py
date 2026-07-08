@@ -172,6 +172,39 @@ def test_graph_prints_mermaid(capsys):
     assert "generate" in out.lower()
 
 
+# ------------------------------------------------------- exit-code contract
+
+
+def test_help_returns_0_without_raising(capsys):
+    code = main(["draft", "--help"])
+    out, _ = capsys.readouterr()
+    assert code == 0
+    assert "--channel" in out
+
+
+def test_unknown_flag_returns_2_without_raising(capsys):
+    code = main(["draft", "--no-such-flag"])
+    capsys.readouterr()
+    assert code == 2
+
+
+def test_broken_pipe_keeps_decision_exit_code(tmp_path, monkeypatch):
+    pytest.importorskip("langgraph")
+
+    class _BrokenStdout:
+        def write(self, _):
+            raise BrokenPipeError
+
+        def flush(self):
+            raise BrokenPipeError
+
+    source = tmp_path / "input.txt"
+    source.write_text("quick note about the plan", encoding="utf-8")
+    monkeypatch.setattr(sys, "stdout", _BrokenStdout())
+    code = main(_draft_argv(tmp_path, "--file", str(source)))
+    assert code in (0, 1)
+
+
 # ---------------------------------------------------------------- import
 
 
