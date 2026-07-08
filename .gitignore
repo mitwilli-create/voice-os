@@ -24,3 +24,6 @@ output/
 !ingest.example.json
 !tests/fixtures/**/*.json
 sources/
+
+# product layer runtime data: checkpoint DB + KB snapshots contain personal data
+var/

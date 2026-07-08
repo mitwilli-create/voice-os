@@ -74,13 +74,13 @@ observability fields the mission requires. All values serializable.
 
 ```python
 class VoiceState(TypedDict):
-    # request (set once at invoke)
+    # request (set once at invoke; all post-normalization canonical values)
     input_text: str
     channel: str
     audience: str
     situation: str
     goal: str
-    stakes: str
+    stakes: str        # always canonical here; None never reaches state
     medium: str | None
     max_revisions: int
 
@@ -168,12 +168,23 @@ voice_os.draft(
     audience: str = "peer",
     situation: str = "standard",
     goal: str = "unknown",
-    stakes: str | None = None,
+    stakes: str | None = None,     # None = "not specified"; see contract below
     medium: str | None = None,
     max_revisions: int = 2,
     run_id: str | None = None,     # supply to make the run resumable/inspectable by name
 ) -> dict
 ```
+
+`stakes` contract: the public parameter accepts None only so alias rule
+3 can reroute a stakes-shaped situation value. Normalization always
+resolves it to a canonical string before anything else runs: an
+explicit value is alias-normalized ("high_stakes" -> "high"), a
+rerouted situation value supplies it, and otherwise it defaults to
+"routine" (the `VoiceContext` default). `VoiceContext` is then
+constructed and validated with the canonical string, so
+`VoiceState.stakes` is always a required, validated `str`, exactly as
+the existing context model demands. None never reaches the graph or
+the persisted state.
 
 Returns a JSON-safe result envelope:
 
@@ -243,7 +254,8 @@ situation=standard, stakes=high, goal=set-expectations.
 ## Persistence (SqliteSaver)
 
 - Database: `var/runs.sqlite` (override with `VOICE_OS_VAR_DIR`). The
-  `var/` directory is new and gets a `.gitignore` entry; checkpoints
+  `var/` directory is gitignored (entry added in this design PR, ahead
+  of any code writing there); checkpoints
   contain draft text, which is personal data.
 - One `thread_id` per `draft()` call: caller-supplied `run_id` or a
   generated UTC-timestamp + random-suffix id.
@@ -291,12 +303,16 @@ later.
 
 ## Dependency containment
 
-- New runtime deps (first third-party runtime deps in the project):
-  `langgraph` + `langgraph-checkpoint-sqlite` (verified installed and
-  importing as langgraph 1.2.8 / checkpoint-sqlite 3.1.0 on the dev
-  machine, Python 3.11).
-- `requirements.txt` gains a clearly-marked optional section: core
-  stays stdlib-only; the product layer requires the langgraph pair.
+- New optional runtime deps for the product layer: `langgraph` +
+  `langgraph-checkpoint-sqlite` (verified installed and importing as
+  langgraph 1.2.8 / checkpoint-sqlite 3.1.0 on the dev machine, Python
+  3.11). They join the already-optional `anthropic` SDK in
+  `requirements.txt`; the core pipeline keeps running on the stdlib
+  alone, with the anthropic and langgraph integrations both degrading
+  gracefully when absent.
+- `requirements.txt` gains a clearly-marked optional product-layer
+  section: the core needs none of it; `voice_os.draft()` requires the
+  langgraph pair.
 - `voice_os/product/graph.py` is the only module importing langgraph.
   `state.py`, `aliases.py`, `kb.py` are stdlib-only and importable
   everywhere.
