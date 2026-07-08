@@ -179,3 +179,30 @@ def run_pipeline(
 
 # Imported last: model.py uses run_cycles and load_corpus defined above.
 from .model import QueryResult, VoiceModel  # noqa: E402
+
+# The callable product layer (voice_os.draft and friends) is exposed
+# lazily via PEP 562 so `import voice_os` stays stdlib-only. The
+# langgraph dependency is only touched when a graph-backed function is
+# actually called (see voice_os/product/__init__.py).
+_PRODUCT_EXPORTS = frozenset(
+    {
+        "draft",
+        "run_history",
+        "describe_graph",
+        "load_kb",
+        "snapshot_kb",
+        "list_kb_snapshots",
+    }
+)
+
+
+def __getattr__(name: str):
+    if name in _PRODUCT_EXPORTS:
+        from . import product
+
+        return getattr(product, name)
+    raise AttributeError(f"module 'voice_os' has no attribute '{name}'")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _PRODUCT_EXPORTS)
