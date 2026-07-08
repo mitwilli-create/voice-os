@@ -68,6 +68,9 @@ def scrub_em_dashes(text: str) -> str:
     scrubbed = _EM_DASH_RUN.sub(" - ", text)
     scrubbed = re.sub(r"(?m)^ - ", "- ", scrubbed)
     scrubbed = re.sub(r"(?m) - $", "", scrubbed)
+    # A dash that ran straight into punctuation was decorative; drop it
+    # rather than leave a space before the mark ("word—." -> "word.").
+    scrubbed = re.sub(r" - ([,.;:!?)])", r"\1", scrubbed)
     return scrubbed
 
 

@@ -104,6 +104,23 @@ class TestEmDashScrub(unittest.TestCase):
         self.assertEqual(scrub_em_dashes("trailing—\nnext"), "trailing\nnext")
         # Newlines around a dash are preserved as line structure.
         self.assertNotIn("—", scrub_em_dashes("a—\n—b"))
+        # A dash running into punctuation is dropped, never left as a
+        # space before the mark.
+        self.assertEqual(scrub_em_dashes("word—."), "word.")
+        self.assertEqual(scrub_em_dashes("wait—, no"), "wait, no")
+
+    def test_pass_through_draft_is_scrubbed_at_the_boundary(self):
+        # An already-in-voice draft can pass the gate at cycle 0 with no
+        # persona call; the ban must hold on that path too.
+        from voice_os import run_cycles
+
+        baseline = load_corpus(CORPUS)
+        dashed = DRAFT_GOOD.replace(", and", " — and", 1)
+        self.assertIn("—", dashed)
+        cycles, result, text, modes = run_cycles(
+            baseline, dict(baseline.mean), dashed, [], max_cycles=2
+        )
+        self.assertNotIn("—", text)
 
     def test_scrub_untouched_text_is_identity(self):
         clean = "No dashes here - just a hyphen, a colon: and prose.\n"
