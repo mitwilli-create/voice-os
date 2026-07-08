@@ -218,6 +218,9 @@ def prepare(state: VoiceState) -> dict:
     drift_flags = q.meta.get("drift_flags") or []
     if drift_flags:
         notes.append(f"prepare: drift flags active: {drift_flags}")
+    evolution_flags = q.meta.get("evolution_flags") or []
+    if evolution_flags:
+        notes.append(f"prepare: evolution flags active: {evolution_flags}")
 
     corpus_path = state.get("corpus_path") or _LOAD_DEFAULTS["corpus_path"]
     provenance = {

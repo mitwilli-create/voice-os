@@ -19,6 +19,7 @@ ARTIFACT_FILES = {
     "context_profiles": "context_profiles.json",
     "ngram_banned": "ngram_banned.json",
     "drift_report": "drift_report.json",
+    "evolution_flags": "evolution_flags.json",
 }
 
 
@@ -30,6 +31,7 @@ class MinedArtifacts:
     context_profiles: dict | None = None
     ngram_banned: list[str] = field(default_factory=list)
     drift_report: dict | None = None
+    evolution_flags: dict | None = None
     meta: dict = field(default_factory=dict)  # per-artifact generated_at etc.
 
 
@@ -83,6 +85,8 @@ def load_artifacts(mined_dir: str | None) -> MinedArtifacts:
             artifacts.context_profiles = raw["data"]
         elif name == "drift_report":
             artifacts.drift_report = raw["data"]
+        elif name == "evolution_flags":
+            artifacts.evolution_flags = raw["data"]
     return artifacts
 
 

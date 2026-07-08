@@ -292,3 +292,82 @@ def test_draft_envelope_double_run(tmp_path):
         golden_utils.build_draft_envelope(str(tmp_path / "b"))
     )
     assert canon(first) == canon(second)
+
+
+# ------------------------------------ evolution module (docs/evolution.md)
+
+
+def _evolution_store(root) -> str:
+    chunks_dir = os.path.join(str(root), "chunks")
+    os.makedirs(chunks_dir, exist_ok=True)
+    with open(
+        os.path.join(chunks_dir, "synthetic.jsonl"), "w", encoding="utf-8"
+    ) as f:
+        for chunk in synthetic_chunks():
+            f.write(json.dumps(chunk) + "\n")
+    return chunks_dir
+
+
+def test_evolution_pure_surfaces_double_run(tmp_path):
+    from voice_os.evolution import (
+        check_drift,
+        content_hash,
+        diff_profiles,
+        evolution_timeline,
+        extract_pattern_profile,
+        generate_insights,
+    )
+
+    texts = [chunk["text"] for chunk in synthetic_chunks()]
+    assert_double_run(lambda: extract_pattern_profile(texts))
+
+    profile_a = extract_pattern_profile(texts[: len(texts) // 2])
+    profile_b = extract_pattern_profile(texts[len(texts) // 2 :])
+    assert_double_run(lambda: diff_profiles(profile_a, profile_b))
+    assert content_hash({"profile": profile_a}) == content_hash(
+        {"profile": extract_pattern_profile(texts[: len(texts) // 2])}
+    )
+
+    chunks_dir = _evolution_store(tmp_path)
+    assert_double_run(
+        lambda: evolution_timeline(chunks_dir, group_by="window")
+    )
+    assert_double_run(lambda: evolution_timeline(chunks_dir, group_by="tier"))
+    assert_double_run(
+        lambda: generate_insights(chunks_dir, min_slice_chunks=3)
+    )
+    # check_drift with no stored baseline is pure extraction.
+    assert_double_run(
+        lambda: check_drift(chunks_dir, str(tmp_path / "var-none"))
+    )
+
+
+def _normalize_drift_envelope(envelope: dict) -> dict:
+    import re as _re
+
+    envelope = copy.deepcopy(envelope)
+    envelope["run_id"] = "<run-id>"
+    envelope["baseline"]["baseline_id"] = "<baseline-id>"
+    envelope["artifact_path"] = "<artifact-path>"
+    envelope["trace"] = [
+        _re.sub(r"\d{8}T\d{6}Z(-\d+)?", "<ts>", note)
+        for note in envelope.get("trace", [])
+    ]
+    return envelope
+
+
+def test_drift_run_envelope_double_run(tmp_path):
+    pytest.importorskip("langgraph")
+    from voice_os.evolution import drift_run
+
+    chunks_dir = _evolution_store(tmp_path)
+    first = _normalize_drift_envelope(
+        drift_run(chunks_dir, str(tmp_path / "a"), str(tmp_path / "mined-a"))
+    )
+    second = _normalize_drift_envelope(
+        drift_run(chunks_dir, str(tmp_path / "b"), str(tmp_path / "mined-b"))
+    )
+    # Both runs establish a baseline from identical inputs: identical
+    # envelopes (including the content hash) minus run-scoped fields.
+    assert canon(first) == canon(second)
+    assert first["baseline"]["content_hash"]

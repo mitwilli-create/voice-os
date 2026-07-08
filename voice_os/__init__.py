@@ -188,10 +188,11 @@ def run_pipeline(
 # Imported last: model.py uses run_cycles and load_corpus defined above.
 from .model import QueryResult, VoiceModel  # noqa: E402
 
-# The callable product layer (voice_os.draft and friends) is exposed
-# lazily via PEP 562 so `import voice_os` stays stdlib-only. The
-# langgraph dependency is only touched when a graph-backed function is
-# actually called (see voice_os/product/__init__.py).
+# The callable product layer (voice_os.draft and friends) and the
+# evolution module are exposed lazily via PEP 562 so `import voice_os`
+# stays stdlib-only. The langgraph dependency is only touched when a
+# graph-backed function is actually called (see
+# voice_os/product/__init__.py and voice_os/evolution/__init__.py).
 _PRODUCT_EXPORTS = frozenset(
     {
         "draft",
@@ -202,6 +203,16 @@ _PRODUCT_EXPORTS = frozenset(
         "list_kb_snapshots",
     }
 )
+_EVOLUTION_EXPORTS = frozenset(
+    {
+        "evolution_timeline",
+        "voice_insights",
+        "check_drift",
+        "drift_run",
+        "drift_run_history",
+        "describe_drift_graph",
+    }
+)
 
 
 def __getattr__(name: str):
@@ -209,8 +220,12 @@ def __getattr__(name: str):
         from . import product
 
         return getattr(product, name)
+    if name in _EVOLUTION_EXPORTS:
+        from . import evolution
+
+        return getattr(evolution, name)
     raise AttributeError(f"module 'voice_os' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-    return sorted(set(globals()) | _PRODUCT_EXPORTS)
+    return sorted(set(globals()) | _PRODUCT_EXPORTS | _EVOLUTION_EXPORTS)

@@ -110,6 +110,10 @@ class VoiceModel:
         }
         if self.mined.drift_report:
             meta["drift_flags"] = self.mined.drift_report.get("flags", [])
+        if self.mined.evolution_flags:
+            meta["evolution_flags"] = self.mined.evolution_flags.get(
+                "flags", []
+            )
 
         return QueryResult(
             context=ctx.as_dict(),
