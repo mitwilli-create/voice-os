@@ -12,7 +12,12 @@ Handles the two local export formats:
        body...
 
    These are already self-authored (sent), but bodies still need the
-   quoted-reply stripping shared with the mbox adapter.
+   quoted-reply stripping shared with the mbox adapter. They are stamped
+   source_type "message_sent" so per-source and per-medium mining can
+   tell them apart from Gmail "email_sent" chunks. Chunks ingested before
+   that distinction existed carry "email_sent"; rebuild the source with
+   `python -m ingest run --source messages --full` to restamp them (see
+   docs/doc-types.md).
 
 2. iMessage line export: "[YYYY-MM-DD HH:MM:SS] sender: text" lines with
    bare-line continuations. Senders are phone numbers or emails, so
@@ -62,7 +67,7 @@ def parse_combined_sent(raw: str, origin_file: str, export_id: str) -> Iterator[
             pass
         yield RawRecord(
             text=body,
-            source_type="email_sent",
+            source_type="message_sent",
             origin_file=origin_file,
             export_id=export_id,
             timestamp=timestamp,

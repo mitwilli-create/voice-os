@@ -19,6 +19,7 @@ CHANNEL_BY_SOURCE = {
     "messenger": "chat",
     "messenger_archived": "chat",
     "imessage": "text",
+    "message_sent": "text",
     "email_sent": "email",
     "ig_post": "social",
     "ig_story": "social",
@@ -36,6 +37,7 @@ MEDIUM_BY_SOURCE = {
     "messenger": "dm",
     "messenger_archived": "dm",
     "imessage": "sms",
+    "message_sent": "sms",
     "email_sent": "email",
     "ig_post": "post",
     "ig_story": "story",
@@ -94,13 +96,19 @@ def infer_goal(text: str, channel: str, signals: dict) -> str:
     return "inform" if channel in ("email", "doc") else "connect"
 
 
-def build_context(source_type: str, text: str, relationship_hint: str = "") -> Context:
+def build_context(
+    source_type: str,
+    text: str,
+    relationship_hint: str = "",
+    doc_type: str = "",
+) -> Context:
     channel = infer_channel(source_type)
     signals = tone_signals(text)
     return Context(
         channel=channel,
         audience=infer_audience(source_type, relationship_hint),
         medium=MEDIUM_BY_SOURCE.get(source_type, "script"),
+        doc_type=doc_type,
         relationship_hint=relationship_hint,
         goal=infer_goal(text, channel, signals),
         tone_signals=signals,

@@ -19,6 +19,7 @@ class RawRecord:
     export_id: str
     timestamp: str | None = None
     relationship_hint: str = ""
+    doc_type: str = ""
     extra: dict = field(default_factory=dict)
 
 

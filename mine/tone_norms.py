@@ -1,9 +1,12 @@
 """Per-context axis and tone profiles mined from the chunk store.
 
 Produces the context_profiles artifact: tier-weighted axis and tone
-statistics per audience, per medium, per goal, and per (audience, medium)
-pair. The runtime blends these mined profiles over the hand-seeded delta
-tables (docs/extended-model.md).
+statistics per audience, per medium, per goal, per doc_type, and per
+(audience, medium) pair. The runtime blends these mined profiles over the
+hand-seeded delta tables (docs/extended-model.md). Chunks ingested before
+context.doc_type existed simply contribute no doc_type group, and readers
+treat a missing doc_types key as no groups, so old chunk stores and old
+artifacts keep working (docs/doc-types.md).
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ def mine_context_profiles(
         "audiences": {},
         "media": {},
         "goals": {},
+        "doc_types": {},
         "pairs": {},
     }
 
@@ -38,12 +42,15 @@ def mine_context_profiles(
         audience = context.get("audience", "")
         medium = context.get("medium", "")
         goal = context.get("goal", "")
+        doc_type = context.get("doc_type", "")
         if audience:
             groups["audiences"].setdefault(audience, GroupStats()).add(chunk)
         if medium:
             groups["media"].setdefault(medium, GroupStats()).add(chunk)
         if goal and goal != "unknown":
             groups["goals"].setdefault(goal, GroupStats()).add(chunk)
+        if doc_type:
+            groups["doc_types"].setdefault(doc_type, GroupStats()).add(chunk)
         if audience and medium:
             groups["pairs"].setdefault(f"{audience}|{medium}", GroupStats()).add(chunk)
 

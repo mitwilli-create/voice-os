@@ -91,7 +91,8 @@ def load_artifacts(mined_dir: str | None) -> MinedArtifacts:
 
 
 def group_profile(context_profiles: dict | None, kind: str, key: str) -> dict | None:
-    """Look up one mined group profile (audiences/media/goals/pairs)."""
+    """Look up one mined group profile (audiences/media/goals/doc_types/
+    pairs). Kinds absent from the artifact simply return None."""
     if not context_profiles:
         return None
     return context_profiles.get(kind, {}).get(key)

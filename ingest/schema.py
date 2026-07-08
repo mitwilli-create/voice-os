@@ -24,7 +24,7 @@ def content_hash(normalized_text: str) -> str:
 class Provenance:
     source_type: str
     """Fine-grained origin: instagram_dm, ig_post, messenger, fb_comment,
-    email_sent, imessage, document, video_transcript, ..."""
+    email_sent, message_sent, imessage, document, video_transcript, ..."""
 
     origin_file: str
     """Path of the file inside the export the text came from."""
@@ -51,6 +51,12 @@ class Context:
     medium: str
     """Raw medium before vocabulary mapping: dm, post, comment, story,
     email, sms, script, spoken."""
+
+    doc_type: str = ""
+    """Document subtype for long-form sources: scripts, segment-intros,
+    interview-questions, program-plans, cv, cover-letters, impact-docs,
+    writing-samples, on-camera, ... Empty for sources without a subtype
+    and for chunks ingested before this field existed."""
 
     relationship_hint: str = ""
     """Conversation name, recipient domain, or similar counterpart signal."""

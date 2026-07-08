@@ -49,7 +49,7 @@ def run_source(adapter, manifest: Manifest, corpus_dir: str) -> dict:
                 continue
             year = int(record.timestamp[:4]) if record.timestamp else None
             context = build_context(
-                record.source_type, text, record.relationship_hint
+                record.source_type, text, record.relationship_hint, record.doc_type
             )
             for key, value in record.extra.items():
                 if value is None:

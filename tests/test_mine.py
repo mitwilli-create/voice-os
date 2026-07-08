@@ -16,7 +16,7 @@ os.environ["VOICE_OS_OFFLINE"] = "1"
 from mine.cli import main as mine_main  # noqa: E402
 from mine.recipients import mine_recipient_deltas  # noqa: E402
 from mine.tone_norms import mine_context_profiles  # noqa: E402
-from voice_os.mined import load_artifacts, validate_artifact  # noqa: E402
+from voice_os.mined import group_profile, load_artifacts, validate_artifact  # noqa: E402
 from voice_os.tone import tone_signals  # noqa: E402
 
 # Hash prefixes with known split membership: 0x00000000 % 100 = 0 (holdout
@@ -34,10 +34,13 @@ def make_chunk(
     goal: str = "connect",
     train: bool = True,
     year: int = 2025,
+    doc_type: str | None = None,
 ) -> dict:
+    # doc_type None omits the key entirely, modeling chunks ingested
+    # before context.doc_type existed.
     prefix = TRAIN_HASH if train else HOLDOUT_HASH
     body_hash = prefix[:8] + hashlib.sha256(text.encode()).hexdigest()[:56]
-    return {
+    chunk = {
         "id": body_hash[:16],
         "text": text,
         "hash": body_hash,
@@ -61,6 +64,9 @@ def make_chunk(
         },
         "schema_version": "1.0",
     }
+    if doc_type is not None:
+        chunk["context"]["doc_type"] = doc_type
+    return chunk
 
 
 def corpus_of(n: int, **kwargs) -> list[dict]:
@@ -132,6 +138,31 @@ def test_context_profiles_group_by_audience_medium_goal_pair():
     group = data["audiences"]["friend-family"]
     assert group["n_chunks"] == 45
     assert "exclaim_per_100w" in group["tone_mean"]
+
+
+def test_context_profiles_group_by_doc_type():
+    chunks = corpus_of(
+        45, audience="external", medium="script", doc_type="scripts"
+    )
+    chunks += corpus_of(45)  # old-style chunks: no doc_type key at all
+    artifact = mine_context_profiles(chunks, min_chunks=40)
+    data = artifact["data"]
+    assert set(data["doc_types"]) == {"scripts"}
+    assert data["doc_types"]["scripts"]["n_chunks"] == 45
+    assert data["global"]["n_chunks"] == 90, "old chunks still count globally"
+
+
+def test_empty_doc_type_not_grouped():
+    chunks = corpus_of(45, doc_type="")
+    artifact = mine_context_profiles(chunks, min_chunks=10)
+    assert artifact["data"]["doc_types"] == {}
+
+
+def test_group_profile_tolerates_artifact_without_doc_types():
+    # Artifacts mined before doc_type existed have no doc_types key.
+    old_artifact_data = {"audiences": {"peer": {"n_chunks": 50}}}
+    assert group_profile(old_artifact_data, "doc_types", "scripts") is None
+    assert group_profile(old_artifact_data, "audiences", "peer") is not None
 
 
 def test_unknown_goal_not_grouped():

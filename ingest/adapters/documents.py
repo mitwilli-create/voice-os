@@ -5,6 +5,12 @@ Walks configured directories for .txt/.md/.docx, splits long documents on
 paragraph boundaries so no chunk exceeds max_chunk_words, and dates each
 chunk from the file's modification time (weakest date signal in the
 system; override by embedding YYYY-MM-DD in the filename).
+
+The first-level folder name under each configured dir becomes the chunk's
+context.doc_type verbatim (expected layout: scripts, segment-intros,
+interview-questions, program-plans, cv, cover-letters, impact-docs,
+writing-samples; any other folder name passes through unchanged). Files
+sitting directly in the configured dir get doc_type "".
 """
 
 from __future__ import annotations
@@ -102,14 +108,17 @@ class DocumentsAdapter(SourceAdapter):
                     except OSError:
                         continue
                 timestamp = file_date(str(path))
+                relative = path.relative_to(root_path)
+                doc_type = relative.parts[0] if len(relative.parts) > 1 else ""
                 for i, chunk_text in enumerate(
                     split_paragraph_chunks(text, max_words)
                 ):
                     yield RawRecord(
                         text=chunk_text,
                         source_type="document",
-                        origin_file=str(path.relative_to(root_path)),
+                        origin_file=str(relative),
                         export_id=export_id,
                         timestamp=timestamp,
+                        doc_type=doc_type,
                         extra={"chunk_index": i},
                     )

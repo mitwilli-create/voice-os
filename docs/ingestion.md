@@ -58,9 +58,9 @@ manifest and writes a report under `corpus/runs/`.
 | `instagram` | Instagram data exports | captions, comments, self DMs; mojibake fix |
 | `facebook` | Meta/Facebook exports | Messenger (inbox + archived), posts, comments, stories |
 | `email` | Gmail `.mbox` | sent mail only; quoted replies and signatures stripped |
-| `messages` | combined-sent and iMessage text exports | iMessage needs `identity.phone_numbers` to attribute lines |
-| `documents` | directories of `.txt` / `.md` / `.docx` | paragraph-chunked; date from filename or mtime |
-| `video` | `.srt` / `.vtt` / `.txt` transcripts | words-per-minute pacing recorded; transcription via a manual whisper hook (see `ingest/adapters/video.py`) |
+| `messages` | combined-sent and iMessage text exports | combined-sent chunks are `message_sent` (distinct from Gmail `email_sent`); iMessage needs `identity.phone_numbers` to attribute lines |
+| `documents` | directories of `.txt` / `.md` / `.docx` | paragraph-chunked; date from filename or mtime; first-level folder name becomes `doc_type` (see `docs/doc-types.md`) |
+| `video` | `.srt` / `.vtt` / `.txt` transcripts | paragraph-chunked; `doc_type` "on-camera"; words-per-minute pacing recorded for timed formats; transcription via a manual whisper hook (see `ingest/adapters/video.py`) |
 
 ## Chunk schema (the scoring contract)
 
@@ -73,10 +73,11 @@ Each line of `corpus/chunks/<source>.jsonl` is one chunk:
   `extractor` (adapter@version), giving full traceability to the original file
 - `context`: `channel` and `audience` from the `voice_os.calibration`
   vocabulary (so exported headers feed the register calibration matrix
-  directly), plus raw `medium`, `relationship_hint`, heuristic `goal`, and
-  `tone_signals` (exclamation density, question ratio, emoji count,
-  sentence length, caps ratio); `inference` records how tags were derived
-  so a later model-based pass can retag without re-ingesting
+  directly), plus raw `medium`, `doc_type` (document subtype, empty when
+  not applicable; see `docs/doc-types.md`), `relationship_hint`, heuristic
+  `goal`, and `tone_signals` (exclamation density, question ratio, emoji
+  count, sentence length, caps ratio); `inference` records how tags were
+  derived so a later model-based pass can retag without re-ingesting
 
 ## Privacy
 
