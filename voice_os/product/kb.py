@@ -25,10 +25,16 @@ import re
 import shutil
 from datetime import datetime, timezone
 
-DEFAULT_KB_DIR = os.path.join("sources", "drive-voice-os")
-DEFAULT_VAR_DIR = "var"
+# All defaults resolve against the repo root this package lives in,
+# never the process CWD, so the callable layer works from any working
+# directory. Env vars and explicit arguments still override.
+REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+DEFAULT_KB_DIR = os.path.join(REPO_ROOT, "sources", "drive-voice-os")
+DEFAULT_VAR_DIR = os.path.join(REPO_ROOT, "var")
 
-_VERSION_RE = re.compile(r"System Instructions v(\d+(?:\.\d+)?)", re.IGNORECASE)
+_VERSION_RE = re.compile(r"System Instructions v(\d+(?:\.\d+)*)", re.IGNORECASE)
 _HEADER_LINES = 5
 
 
@@ -48,23 +54,30 @@ def _sha256(path: str) -> str:
     return digest.hexdigest()
 
 
+def _parse_version(text: str) -> tuple[int, ...]:
+    """Dotted version string to an integer tuple so 5.10 orders above
+    5.2 (float comparison would misorder them)."""
+    return tuple(int(part) for part in text.split("."))
+
+
 def _system_prompt_file(kb_dir: str) -> str | None:
     """Newest system prompt by parsed version header; filename tie-break.
 
     Candidates match *System-Instructions*.md. The version is read from
-    the first few lines ("System Instructions v<major.minor>"); files
-    with no parseable version sort below any versioned file.
+    the first few lines ("System Instructions v<major.minor>") and
+    compared as an integer tuple; files with no parseable version sort
+    below any versioned file.
     """
     candidates = sorted(glob.glob(os.path.join(kb_dir, "*System-Instructions*.md")))
-    best: tuple[float, str] | None = None
+    best: tuple[tuple[int, ...], str] | None = None
     for path in candidates:
-        version = -1.0
+        version: tuple[int, ...] = (-1,)
         try:
             with open(path, encoding="utf-8") as f:
                 head = "".join(f.readline() for _ in range(_HEADER_LINES))
             match = _VERSION_RE.search(head)
             if match:
-                version = float(match.group(1))
+                version = _parse_version(match.group(1))
         except OSError:
             continue
         if best is None or (version, path) > best:

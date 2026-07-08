@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -30,17 +31,24 @@ from ..personas import AdversarialPersona, GenerativePersona
 from ..qa import find_banned, gate_extended
 from ..tone import ToneProfile, derive_metrics, tone_signals
 from . import kb as kb_module
+from .kb import REPO_ROOT
 from .state import VoiceState
 
-# Model cache keyed by the resolved load arguments, so repeated draft()
-# calls in one process do not re-parse the corpus.
-_MODELS: dict[tuple, VoiceModel] = {}
+# Bounded LRU of loaded models keyed by the resolved load arguments, so
+# repeated draft() calls in one process do not re-parse the corpus while
+# a long-lived service cycling many path combinations cannot grow memory
+# without limit.
+_MODEL_CACHE_MAX = 4
+_MODELS: OrderedDict[tuple, VoiceModel] = OrderedDict()
 
+# Defaults resolve against the package's repo root, never the process
+# CWD, so external callers can invoke draft() from anywhere (same fix
+# family as the eval path hardening in PR #8).
 _LOAD_DEFAULTS = {
-    "corpus_path": os.path.join("corpus", "voice_corpus.txt"),
-    "chunks_dir": os.path.join("corpus", "chunks"),
-    "mined_dir": os.path.join("corpus", "mined"),
-    "banned_path": os.path.join("data", "banned_list.txt"),
+    "corpus_path": os.path.join(REPO_ROOT, "corpus", "voice_corpus.txt"),
+    "chunks_dir": os.path.join(REPO_ROOT, "corpus", "chunks"),
+    "mined_dir": os.path.join(REPO_ROOT, "corpus", "mined"),
+    "banned_path": os.path.join(REPO_ROOT, "data", "banned_list.txt"),
 }
 
 
@@ -49,15 +57,20 @@ def _get_model(state: VoiceState) -> VoiceModel:
         state.get(name) or _LOAD_DEFAULTS[name]
         for name in ("corpus_path", "chunks_dir", "mined_dir", "banned_path")
     )
-    if key not in _MODELS:
-        corpus_path, chunks_dir, mined_dir, banned_path = key
-        _MODELS[key] = VoiceModel.load(
-            corpus_path,
-            chunks_dir=chunks_dir,
-            mined_dir=mined_dir,
-            banned_path=banned_path,
-        )
-    return _MODELS[key]
+    if key in _MODELS:
+        _MODELS.move_to_end(key)
+        return _MODELS[key]
+    corpus_path, chunks_dir, mined_dir, banned_path = key
+    model = VoiceModel.load(
+        corpus_path,
+        chunks_dir=chunks_dir,
+        mined_dir=mined_dir,
+        banned_path=banned_path,
+    )
+    _MODELS[key] = model
+    while len(_MODELS) > _MODEL_CACHE_MAX:
+        _MODELS.popitem(last=False)
+    return model
 
 
 def _merge_modes(state: VoiceState, mode: str) -> list[str]:

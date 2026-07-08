@@ -235,6 +235,27 @@ def test_snapshot_versioning_is_content_addressed(tmp_path):
     assert (snap_dir / compact.name).is_file()
 
 
+def test_version_ordering_is_numeric_not_float(tmp_path):
+    """v5.10 must beat v5.2 (float comparison would misorder them)."""
+    kb_dir = tmp_path / "kb"
+    kb_dir.mkdir()
+    (kb_dir / "A-System-Instructions.md").write_text(
+        "# VOICE OS System Instructions v5.2\n", encoding="utf-8"
+    )
+    (kb_dir / "B-System-Instructions.md").write_text(
+        "# VOICE OS System Instructions v5.10\n", encoding="utf-8"
+    )
+    bundle = kb_module.load_kb(str(kb_dir))
+    assert bundle["system_prompt_file"] == "B-System-Instructions.md"
+
+
+def test_default_paths_are_repo_root_anchored_not_cwd():
+    """External callers must be able to invoke from any working dir."""
+    assert os.path.isabs(kb_module.DEFAULT_KB_DIR)
+    assert os.path.isabs(kb_module.DEFAULT_VAR_DIR)
+    assert kb_module.REPO_ROOT == str(REPO_ROOT)
+
+
 def test_ensure_snapshot_absent_kb_returns_none(tmp_path):
     assert (
         kb_module.ensure_snapshot(
@@ -357,6 +378,30 @@ def test_describe_graph_names_all_nodes():
     mermaid = voice_os.describe_graph()
     for node in ("prepare", "generate", "critique", "qa_gate", "revise"):
         assert node in mermaid
+
+
+def test_model_cache_is_bounded(tmp_path):
+    pytest.importorskip("langgraph")
+    from voice_os.product import graph as graph_module
+
+    assert os.path.isabs(graph_module._LOAD_DEFAULTS["corpus_path"])
+    graph_module._MODELS.clear()
+    try:
+        for index in range(graph_module._MODEL_CACHE_MAX + 3):
+            # Distinct nonexistent banned paths make distinct cache keys
+            # (VoiceModel.load degrades to an empty banned list).
+            state = {
+                "corpus_path": CORPUS,
+                "chunks_dir": None,
+                "mined_dir": None,
+                "banned_path": str(tmp_path / f"banned-{index}.txt"),
+            }
+            graph_module._get_model(state)
+        assert len(graph_module._MODELS) == graph_module._MODEL_CACHE_MAX
+        # The most recent key survived eviction and hits the cache.
+        assert graph_module._get_model(state) is graph_module._get_model(state)
+    finally:
+        graph_module._MODELS.clear()
 
 
 def test_repo_tree_stays_clean_after_draft(tmp_path):
