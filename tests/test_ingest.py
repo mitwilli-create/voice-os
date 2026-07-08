@@ -304,6 +304,191 @@ def test_split_paragraph_chunks_bounds_oversized_paragraph():
     assert sum(len(c.split()) for c in chunks) == 950
 
 
+# --- doc_type subtypes (docs/doc-types.md) ------------------------------
+
+
+def test_documents_adapter_derives_doc_type_from_first_level_folder(tmp_path):
+    docs = tmp_path / "documents"
+    (docs / "scripts").mkdir(parents=True)
+    (docs / "scripts" / "2024-01-05-show-open.txt").write_text(
+        "Tonight we look at three stories shaping the week ahead.",
+        encoding="utf-8",
+    )
+    (docs / "cover-letters" / "nested").mkdir(parents=True)
+    (docs / "cover-letters" / "nested" / "2025-02-01-letter.md").write_text(
+        "I am writing to express interest in the producer role.",
+        encoding="utf-8",
+    )
+    (docs / "unexpected-folder").mkdir()
+    (docs / "unexpected-folder" / "note.txt").write_text(
+        "Folder names outside the expected set pass through verbatim.",
+        encoding="utf-8",
+    )
+    (docs / "2023-11-09-root-note.txt").write_text(
+        "Files directly in the configured dir carry no doc_type.",
+        encoding="utf-8",
+    )
+
+    from ingest.adapters.documents import DocumentsAdapter
+
+    config = make_config(tmp_path, documents={"dirs": [str(docs)]})
+    records = list(DocumentsAdapter(config).iter_records())
+    by_file = {r.origin_file: r for r in records}
+    assert by_file["scripts/2024-01-05-show-open.txt"].doc_type == "scripts"
+    assert (
+        by_file["cover-letters/nested/2025-02-01-letter.md"].doc_type
+        == "cover-letters"
+    ), "only the first-level folder names the doc_type"
+    assert by_file["unexpected-folder/note.txt"].doc_type == "unexpected-folder"
+    assert by_file["2023-11-09-root-note.txt"].doc_type == ""
+
+
+def test_doc_type_lands_in_chunk_context(tmp_path):
+    import json as json_mod
+
+    from ingest.adapters.documents import DocumentsAdapter
+
+    docs = tmp_path / "documents"
+    (docs / "segment-intros").mkdir(parents=True)
+    (docs / "segment-intros" / "2024-06-01-intro.txt").write_text(
+        "Coming up after the break, a conversation about local news deserts.",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, documents={"dirs": [str(docs)]})
+    corpus_dir = config["corpus_dir"]
+    manifest = Manifest(os.path.join(corpus_dir, "manifest.json"))
+    run_source(DocumentsAdapter(config), manifest, corpus_dir)
+
+    with open(os.path.join(corpus_dir, "chunks", "documents.jsonl"), encoding="utf-8") as f:
+        chunks = [json_mod.loads(line) for line in f]
+    assert chunks
+    assert all(c["context"]["doc_type"] == "segment-intros" for c in chunks)
+
+
+def test_video_adapter_chunks_plain_txt_and_stamps_doc_type(tmp_path):
+    from ingest.adapters.video import VideoAdapter
+
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    long_transcript = " ".join(f"word{i}" for i in range(950))
+    (tdir / "2023-05-01-episode.txt").write_text(long_transcript, encoding="utf-8")
+
+    config = make_config(tmp_path, video={"transcript_paths": [str(tdir)]})
+    records = list(VideoAdapter(config).iter_records())
+    assert len(records) == 3, "950 words at max 400 must yield three chunks"
+    assert all(r.source_type == "video_transcript" for r in records)
+    assert all(r.doc_type == "on-camera" for r in records)
+    assert all(len(r.text.split()) <= 400 for r in records)
+    assert [r.extra["chunk_index"] for r in records] == [0, 1, 2]
+    assert all(
+        "words_per_minute" not in r.extra for r in records
+    ), "plain txt has no timing info, so no WPM"
+
+
+def test_video_adapter_srt_keeps_wpm_and_doc_type(tmp_path):
+    from ingest.adapters.video import VideoAdapter
+
+    config = make_config(
+        tmp_path,
+        video={"transcript_paths": [os.path.join(FIXTURES, "transcript_sample.srt")]},
+    )
+    records = list(VideoAdapter(config).iter_records())
+    assert len(records) == 1
+    assert records[0].doc_type == "on-camera"
+    assert 20 < records[0].extra["words_per_minute"] < 26
+
+
+def test_video_adapter_keeps_computed_zero_wpm(tmp_path):
+    """Qodo round 1: a computed 0.0 WPM is real pacing data and must not
+    be dropped by a truthiness check; only None (no timing) is dropped."""
+    from ingest.adapters.video import VideoAdapter
+
+    slow = tmp_path / "transcripts"
+    slow.mkdir()
+    (slow / "2024-03-01-slow.srt").write_text(
+        "1\n00:00:00,000 --> 00:30:00,000\nhello\n",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, video={"transcript_paths": [str(slow)]})
+    records = list(VideoAdapter(config).iter_records())
+    assert len(records) == 1
+    assert records[0].extra["words_per_minute"] == 0.0
+
+
+def test_chunk_index_is_metadata_not_tone_signal(tmp_path):
+    """Qodo round 1: numeric bookkeeping like chunk_index belongs in
+    context.extra; tone_signals carries style metrics like WPM only."""
+    import json as json_mod
+
+    from ingest.adapters.video import VideoAdapter
+
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    (tdir / "2024-04-01-clip.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:30,000\n"
+        "A short clip transcript with a handful of spoken words in it.\n",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, video={"transcript_paths": [str(tdir)]})
+    corpus_dir = config["corpus_dir"]
+    manifest = Manifest(os.path.join(corpus_dir, "manifest.json"))
+    run_source(VideoAdapter(config), manifest, corpus_dir)
+
+    with open(os.path.join(corpus_dir, "chunks", "video.jsonl"), encoding="utf-8") as f:
+        chunks = [json_mod.loads(line) for line in f]
+    assert chunks
+    for chunk in chunks:
+        assert chunk["context"]["extra"]["chunk_index"] == 0
+        assert "chunk_index" not in chunk["context"]["tone_signals"]
+        assert chunk["context"]["tone_signals"]["words_per_minute"] > 0
+        assert "words_per_minute" not in chunk["context"]["extra"]
+
+
+def test_combined_sent_gets_message_source_type_not_email():
+    with open(os.path.join(FIXTURES, "combined_sent_sample.txt"), encoding="utf-8") as f:
+        raw = f.read()
+    records = list(parse_combined_sent(raw, "sample.txt", "sample"))
+    assert records
+    assert all(r.source_type == "message_sent" for r in records)
+
+    context = build_context("message_sent", "Let me see if I can swing Sunday.")
+    assert context.channel == "text"
+    assert context.medium == "sms"
+    assert context.audience == "friend-family"
+
+
+def test_old_chunk_without_doc_type_key_still_loads():
+    from ingest.schema import Chunk
+
+    old = {
+        "id": "abcdef0123456789",
+        "text": "an old chunk written before doc_type existed",
+        "hash": "abcdef0123456789" + "0" * 48,
+        "tier": 1,
+        "provenance": {
+            "source_type": "instagram_dm",
+            "origin_file": "messages.json",
+            "export_id": "old-export",
+            "timestamp": "2024-05-01T10:00:00",
+            "extractor": "ingest.adapters.instagram@1.0",
+        },
+        "context": {
+            "channel": "chat",
+            "audience": "friend-family",
+            "medium": "dm",
+            "relationship_hint": "old friend",
+            "goal": "connect",
+            "tone_signals": {},
+            "extra": {},
+            "inference": "heuristic-v1",
+        },
+        "schema_version": "1.0",
+    }
+    chunk = Chunk.from_dict(old)
+    assert chunk.context.doc_type == ""
+    assert chunk.to_dict()["context"]["doc_type"] == ""
+
+
 def test_instagram_adapter_survives_symlinked_subdirectory(tmp_path):
     """Qodo round 2: a symlinked directory inside the export must not
     crash origin_file computation or lose records."""

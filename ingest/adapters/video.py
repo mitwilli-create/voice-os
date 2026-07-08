@@ -1,8 +1,11 @@
 """Spoken-voice adapter: transcripts of videos Mitchell anchored or led.
 
 Consumes transcript files (.srt, .vtt, .txt) sitting next to or configured
-alongside the video files. For timed formats it also computes words per
-minute, recorded in extra as a pacing signal for the tone layer.
+alongside the video files. Timed formats (.srt/.vtt) also yield words per
+minute, recorded in extra as a pacing signal for the tone layer; plain
+.txt (raw whisper output, no timestamps) carries no pacing signal. Long
+transcripts are paragraph-chunked with the same max_chunk_words bound as
+the documents adapter, and every chunk is stamped doc_type "on-camera".
 
 Transcription itself is a hook, not a dependency: transcribe_video() tells
 you the exact whisper command to produce the .srt this adapter consumes.
@@ -16,7 +19,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .base import RawRecord, SourceAdapter
-from .documents import file_date
+from .documents import file_date, split_paragraph_chunks
 
 _SRT_TIME = re.compile(
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})"
@@ -77,6 +80,7 @@ class VideoAdapter(SourceAdapter):
                 yield path
 
     def iter_records(self) -> Iterator[RawRecord]:
+        max_words = int(self.options.get("max_chunk_words", 400))
         for path in self._transcript_files():
             try:
                 raw = path.read_text(encoding="utf-8", errors="replace")
@@ -88,12 +92,22 @@ class VideoAdapter(SourceAdapter):
                 text, wpm = raw, None
             if not text.strip():
                 continue
-            extra = {"words_per_minute": wpm} if wpm else {}
-            yield RawRecord(
-                text=text,
-                source_type="video_transcript",
-                origin_file=path.name,
-                export_id=path.parent.name or "video",
-                timestamp=file_date(str(path)),
-                extra=extra,
-            )
+            timestamp = file_date(str(path))
+            for i, chunk_text in enumerate(
+                split_paragraph_chunks(text, max_words)
+            ):
+                extra: dict = {"chunk_index": i}
+                if wpm is not None:
+                    # File-level pacing; every chunk of the file inherits
+                    # it. A computed 0.0 (very slow pacing) is real data,
+                    # so only None (no timing info) is dropped.
+                    extra["words_per_minute"] = wpm
+                yield RawRecord(
+                    text=chunk_text,
+                    source_type="video_transcript",
+                    origin_file=path.name,
+                    export_id=path.parent.name or "video",
+                    timestamp=timestamp,
+                    doc_type="on-camera",
+                    extra=extra,
+                )

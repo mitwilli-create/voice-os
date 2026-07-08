@@ -33,6 +33,12 @@ def _chunks_path(corpus_dir: str, source: str) -> str:
     return os.path.join(corpus_dir, "chunks", f"{source}.jsonl")
 
 
+# Adapter extras that are genuine numeric style metrics and belong in
+# context.tone_signals. Everything else, numeric or not (chunk_index,
+# subject, ...), is adapter metadata and belongs in context.extra.
+TONE_SIGNAL_EXTRAS = frozenset({"words_per_minute"})
+
+
 def run_source(adapter, manifest: Manifest, corpus_dir: str) -> dict:
     stats = {"new": 0, "duplicate": 0, "empty": 0, "words": 0}
     out_path = _chunks_path(corpus_dir, adapter.name)
@@ -49,14 +55,16 @@ def run_source(adapter, manifest: Manifest, corpus_dir: str) -> dict:
                 continue
             year = int(record.timestamp[:4]) if record.timestamp else None
             context = build_context(
-                record.source_type, text, record.relationship_hint
+                record.source_type, text, record.relationship_hint, record.doc_type
             )
             for key, value in record.extra.items():
                 if value is None:
                     continue
-                # tone_signals stays numeric-only; everything else is
-                # adapter metadata and belongs in context.extra.
-                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                # tone_signals stays style-metrics-only; numeric
+                # bookkeeping like chunk_index is still metadata.
+                if key in TONE_SIGNAL_EXTRAS and isinstance(
+                    value, (int, float)
+                ) and not isinstance(value, bool):
                     context.tone_signals[key] = value
                 else:
                     context.extra[key] = value
