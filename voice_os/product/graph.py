@@ -104,10 +104,15 @@ def prepare(state: VoiceState) -> dict:
             "bundle_hash": manifest["bundle_hash"],
             "files": [record["name"] for record in manifest["files"]],
         }
-        kb_note = f"kb: snapshot {manifest['snapshot_id']} ({len(manifest['files'])} files)"
+        kb_note = (
+            f"prepare: kb snapshot {manifest['snapshot_id']} "
+            f"({len(manifest['files'])} files)"
+        )
     else:
         kb_meta = {"status": "absent", "kb_dir": bundle["kb_dir"]}
-        kb_note = f"kb: not found at {bundle['kb_dir']}; drafting without KB"
+        kb_note = (
+            f"prepare: kb not found at {bundle['kb_dir']}; drafting without KB"
+        )
     if bundle.get("errors"):
         kb_meta["errors"] = bundle["errors"]
 
@@ -304,11 +309,19 @@ def run_history(run_id: str, var_dir: str | None = None) -> list[dict]:
         for snapshot in saver.list({"configurable": {"thread_id": run_id}}):
             values = snapshot.checkpoint.get("channel_values", {})
             metadata = snapshot.metadata or {}
-            writes = metadata.get("writes") or {}
+            # langgraph 1.x checkpoint metadata no longer names the node
+            # that wrote; our own trace notes do (every node appends one
+            # prefixed with its name), so derive the node from the state.
+            notes = values.get("trace_notes") or []
+            node = (
+                notes[-1].split(":", 1)[0]
+                if notes
+                else metadata.get("source")
+            )
             steps.append(
                 {
                     "step": metadata.get("step"),
-                    "node": next(iter(writes), metadata.get("source")),
+                    "node": node,
                     "qa_decision": values.get("qa_decision"),
                     "fidelity": (values.get("fidelity_scores") or {}).get(
                         "overall"

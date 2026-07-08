@@ -1,3 +1,8 @@
 # Optional: enables the live Claude personas. The pipeline runs
 # deterministically offline without it.
 anthropic>=0.60
+
+# Optional: the callable product layer (voice_os.draft / LangGraph graph).
+# The core pipeline needs neither; import voice_os works without them.
+langgraph>=1.2
+langgraph-checkpoint-sqlite>=3.1
