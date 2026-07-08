@@ -57,6 +57,9 @@ voice_os/product/
     kb.py           KB loader + snapshot versioning (stdlib only)
     graph.py        LangGraph StateGraph build + node functions
                     (imports langgraph; the only module that does)
+    cli.py          argparse CLI behind python3 -m voice_os
+                    (stdlib-only at import; graph loads on command run)
+voice_os/__main__.py    package entry point delegating to product/cli.py
 ```
 
 Top-level exposure via PEP 562 module `__getattr__` in
@@ -213,6 +216,44 @@ Companion functions:
   (nodes + edges, mermaid text) for documentation and demos.
 - `voice_os.load_kb()`, `voice_os.snapshot_kb()`,
   `voice_os.list_kb_snapshots()`: see KB section.
+
+## CLI entry point (cli.py, cross-instance calling pattern)
+
+The same API is reachable from any shell, which makes Voice OS callable
+from other agents and Claude Code sessions running in other working
+directories without importing the package:
+
+```bash
+cd ~/Documents/voice-os
+python3 -m voice_os draft --channel email --audience boss \
+  --situation high_stakes --goal set_expectations <<'EOF'
+quick note to say the launch plan looks right, one timing question
+EOF
+```
+
+- Draft text arrives on stdin (heredoc-friendly) or via `--file PATH`.
+- The full JSON envelope prints to stdout; `--text-only` prints just
+  the drafted text.
+- Exit codes: 0 decision pass, 1 decision reject (envelope still
+  printed with the best-effort draft), 2 usage, validation, or
+  dependency error.
+- All `draft()` keyword arguments have flag equivalents, including the
+  fixture-path overrides (`--corpus`, `--mined-dir`, `--banned-path`,
+  `--kb-dir`, `--var-dir`), so tests and sandboxed callers never touch
+  the personal corpus.
+- `python3 -m voice_os history <run_id>` and
+  `python3 -m voice_os graph` wrap `run_history()` and
+  `describe_graph()`.
+- Live mode engages exactly as in the Python API: when
+  `ANTHROPIC_API_KEY` resolves in the environment and
+  `VOICE_OS_OFFLINE` is unset. Callers that need live drafting should
+  check `"mode": "live"` in the envelope rather than assuming.
+
+The recommended cross-instance pattern is a thin wrapper (for Claude
+Code, a user-level skill) that exports the key, cd's to the repo, runs
+the command above, and interprets the envelope. The CLI itself stays
+dumb on purpose: no key discovery, no config files, no network logic
+beyond what the pipeline already does.
 
 ## Alias normalization (aliases.py)
 

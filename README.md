@@ -52,7 +52,15 @@ result = voice_os.draft(
 )
 print(result['decision'], result['output_text'])
 "
+
+# Or from any shell / any other agent, no import needed
+python3 -m voice_os draft --channel email --audience boss \
+  --situation high_stakes --goal set_expectations <<'EOF'
+quick note to say the launch plan looks right, one timing question
+EOF
 ```
+
+The CLI prints the same JSON envelope `draft()` returns and exits 0 on a pass decision, 1 on reject, 2 on usage or validation errors, which makes Voice OS callable from other Claude Code sessions and agent harnesses with a single Bash command. See [docs/callable-layer.md](docs/callable-layer.md) for the full flag set and the cross-instance calling pattern.
 
 Output includes axis scores, the register-calibrated target profile, QA gate decision, and a full revision trace per cycle. Context flags (`--channel`, `--audience`, `--situation`) select the register calibration applied to the target; the callable layer accepts natural aliases ("boss" maps to leadership, "high_stakes" to stakes high).
 
