@@ -529,6 +529,29 @@ def test_imessage_me_lines_attributed_and_reactions_dropped():
     assert all(r.source_type == "imessage" for r in records)
 
 
+def test_imessage_tapback_must_quote_whole_message_prose_kept():
+    """Qodo round 1: a real tapback quotes the entire original message,
+    so the quoted form ends the line (or has no closing quote at all
+    because the original wraps onto continuation lines). Prose that
+    embeds a quoted title mid-sentence is real writing and must be kept."""
+    raw = "\n".join(
+        [
+            "[2022-09-14 12:00:00] Me: Loved “Full quoted message”",
+            "[2022-09-14 12:00:05] Me: Loved “Hamilton” last night with the crew",
+            "[2022-09-14 12:00:10] Me: Disliked “start of a wrapped original",
+            "continuation of the quoted original”",
+            "[2022-09-14 12:00:15] Me: Loved an image",
+            "[2022-09-14 12:00:20] Me: A normal closing message",
+        ]
+    )
+    identity = {"names": [], "usernames": [], "emails": [], "phone_numbers": []}
+    records, _ = parse_imessage(raw, identity, "f.txt", "f")
+    assert [r.text for r in records] == [
+        "Loved “Hamilton” last night with the crew",
+        "A normal closing message",
+    ]
+
+
 def test_imessage_phone_identity_attributes_sender_lines():
     """A formatted configured number must match the export's E.164 sender."""
     raw = "\n".join(
@@ -676,6 +699,32 @@ def test_facebook_archived_stories_v2_skips_archive_notices(tmp_path):
     records = list(FacebookAdapter(config).iter_records())
     story_records = [r for r in records if r.source_type == "fb_story"]
     assert [r.text for r in story_records] == ["Actual words typed on a story"]
+
+
+def test_instagram_rglob_only_matches_directories_inside_export(tmp_path):
+    """Qodo round 1: the recursive fallback must classify on directories
+    relative to the export root. A parent folder named "media" above the
+    export must not admit lookalike JSON outside the export's own
+    content directories."""
+    import json as json_mod
+
+    base = tmp_path / "media" / "instagram-export"
+    content = base / "your_instagram_activity" / "media"
+    content.mkdir(parents=True)
+    (content / "posts_1.json").write_text(
+        json_mod.dumps([{"media": [{"title": "Real caption", "creation_timestamp": 1600000000}]}]),
+        encoding="utf-8",
+    )
+    lookalike = base / "unrelated_report"
+    lookalike.mkdir()
+    (lookalike / "posts_1.json").write_text(
+        json_mod.dumps([{"media": [{"title": "Lookalike outside content dirs", "creation_timestamp": 1600000001}]}]),
+        encoding="utf-8",
+    )
+
+    config = make_config(tmp_path, instagram={"paths": [str(base)]})
+    records = [r for r in InstagramAdapter(config).iter_records() if r.source_type == "ig_post"]
+    assert [r.text for r in records] == ["Real caption"]
 
 
 def test_instagram_adapter_survives_symlinked_subdirectory(tmp_path):

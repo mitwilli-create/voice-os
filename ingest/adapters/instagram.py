@@ -82,9 +82,16 @@ class InstagramAdapter(SourceAdapter):
                     seen[f] = None
         # 2026 exports moved content JSON under your_instagram_activity/media;
         # accept any of the content-carrying directory names, which still
-        # excludes lookalikes such as logged_information insights.
+        # excludes lookalikes such as logged_information insights. Only
+        # directories INSIDE the export count: filtering on absolute path
+        # components would admit unrelated JSON whenever some parent folder
+        # above the export happens to be named media, posts, or content.
         for f in sorted(base_path.rglob(pattern)):
-            if {"content", "posts", "media"} & set(f.parts[:-1]):
+            try:
+                inner_dirs = f.relative_to(base_path).parts[:-1]
+            except ValueError:
+                inner_dirs = ()
+            if {"content", "posts", "media"} & set(inner_dirs):
                 seen[f] = None
         return list(seen)
 

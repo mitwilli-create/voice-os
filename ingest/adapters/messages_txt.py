@@ -58,11 +58,17 @@ _IMESSAGE_LINE = re.compile(
 _SELF_SENDER = "Me"
 # iMessage tapbacks rendered as text: they quote the reacted-to message
 # (someone else's words) or name a reacted-to attachment, so they are
-# never corpus material. Prose that merely starts with a reaction verb
-# ("Loved seeing you boys") does not match.
+# never corpus material. A real tapback quotes the ENTIRE original
+# message, so the quoted form must reach the end of the line: either the
+# closing quote is the last non-space character, or there is no closing
+# quote at all because the quoted message continues on later lines (the
+# export wraps multi-line originals; continuations are not collected for
+# skipped lines). Prose that merely starts with a reaction verb ("Loved
+# seeing you boys") or embeds a quoted title mid-sentence ("Loved
+# \"Hamilton\" last night") does not match.
 _REACTION_LINE = re.compile(
     r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned) "
-    r"([\"“]|(an image|an attachment|a movie|a sticker|a GIF)$)"
+    r"([\"“].*[\"”]\s*$|[\"“][^\"”]*$|(an image|an attachment|a movie|a sticker|a GIF)\s*$)"
 )
 
 
