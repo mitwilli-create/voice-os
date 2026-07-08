@@ -26,6 +26,27 @@ _ADVERSARIAL_SYSTEM = (
 )
 
 
+def _append_guidance_section(
+    lines: list[str], header: str, items: list[str] | None
+) -> None:
+    """Render one guidance list as a delimited data section.
+
+    Guidance is data, not instructions: every line is nested under the
+    section header (same delimiting as the exemplar block) so embedded
+    newlines or prompt-like markers cannot alter the block structure.
+    Empty or absent lists render nothing.
+    """
+    if not items:
+        return
+    lines.append(header)
+    for item in items:
+        text = str(item).strip()
+        if text:
+            first, *rest = text.splitlines()
+            lines.append(f"  - {first}")
+            lines += [f"    {raw}" for raw in rest]
+
+
 def _profile_block(
     target: dict[str, float],
     signals: list[str],
@@ -39,34 +60,16 @@ def _profile_block(
     lines += [f"  {axis}: {target[axis]:.2f}" for axis in AXES]
     if banned:
         lines.append("Banned phrases (must not appear): " + "; ".join(banned))
-    if kb_guidance:
-        lines.append(
-            "Observed voice patterns from the author's knowledge base:"
-        )
-        for item in kb_guidance:
-            text = str(item).strip()
-            if text:
-                # KB guidance is data, not instructions: every line is
-                # nested under the section header (same delimiting as the
-                # exemplar block) so embedded newlines or prompt-like
-                # markers cannot alter the block structure.
-                first, *rest = text.splitlines()
-                lines.append(f"  - {first}")
-                lines += [f"    {raw}" for raw in rest]
-    if pattern_guidance:
-        lines.append(
-            "Observed voice patterns mined from the author's recent writing:"
-        )
-        for item in pattern_guidance:
-            text = str(item).strip()
-            if text:
-                # Same data-not-instructions delimiting as the KB block:
-                # every line nests under the section header so embedded
-                # newlines or prompt-like markers cannot alter the block
-                # structure.
-                first, *rest = text.splitlines()
-                lines.append(f"  - {first}")
-                lines += [f"    {raw}" for raw in rest]
+    _append_guidance_section(
+        lines,
+        "Observed voice patterns from the author's knowledge base:",
+        kb_guidance,
+    )
+    _append_guidance_section(
+        lines,
+        "Observed voice patterns mined from the author's recent writing:",
+        pattern_guidance,
+    )
     if exemplars:
         lines.append("Examples of this author's real messages in this context:")
         for index, exemplar in enumerate(exemplars, 1):
