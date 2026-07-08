@@ -20,10 +20,22 @@ Handles the two local export formats:
    docs/doc-types.md).
 
 2. iMessage line export: "[YYYY-MM-DD HH:MM:SS] sender: text" lines with
-   bare-line continuations. Senders are phone numbers or emails, so
-   identity.phone_numbers must be configured or every line is skipped
-   (a warning says how many, rather than silently ingesting other
-   people's words).
+   bare-line continuations, flat and chronological across every chat.
+   What the sender field actually carries, verified against the real
+   export (docs/silent-sources.md):
+
+   - In group chats each line carries the true sender: another member's
+     phone number or email, or the literal label "Me" for the account
+     owner. "Me" lines are self-authored by definition of the format.
+   - In one-to-one chats the exporter stamps BOTH directions with the
+     conversation partner's handle, so those lines cannot be attributed
+     and are skipped (a warning says how many, rather than silently
+     ingesting other people's words).
+   - Tapback lines (Loved "...", Liked "...", and the other reaction
+     verbs) quote someone else's words and are dropped.
+
+   Senders that are phone numbers match identity.phone_numbers on digits
+   regardless of formatting (+1 prefix, dashes, spaces, parentheses).
 """
 
 from __future__ import annotations
@@ -41,6 +53,22 @@ _BLOCK_RULE = re.compile(r"^={10,}\s*$", re.MULTILINE)
 _BODY_RULE = re.compile(r"^-{10,}\s*$", re.MULTILINE)
 _IMESSAGE_LINE = re.compile(
     r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] ([^:]+): (.*)$"
+)
+# The exporter's label for the account owner (seen in group chats).
+_SELF_SENDER = "Me"
+# iMessage tapbacks rendered as text: they quote the reacted-to message
+# (someone else's words) or name a reacted-to attachment, so they are
+# never corpus material. A real tapback quotes the ENTIRE original
+# message, so the quoted form must reach the end of the line: either the
+# closing quote is the last non-space character, or there is no closing
+# quote at all because the quoted message continues on later lines (the
+# export wraps multi-line originals; continuations are not collected for
+# skipped lines). Prose that merely starts with a reaction verb ("Loved
+# seeing you boys") or embeds a quoted title mid-sentence ("Loved
+# \"Hamilton\" last night") does not match.
+_REACTION_LINE = re.compile(
+    r"^(Loved|Liked|Disliked|Laughed at|Emphasized|Questioned) "
+    r"([\"“].*[\"”]\s*$|[\"“][^\"”]*$|(an image|an attachment|a movie|a sticker|a GIF)\s*$)"
 )
 
 
@@ -82,7 +110,9 @@ def parse_imessage(
     raw: str, identity: dict, origin_file: str, export_id: str
 ) -> tuple[list[RawRecord], int]:
     """Returns (self-authored records, count of lines skipped because the
-    sender did not match identity)."""
+    sender did not match identity). A sender of "Me" is self-authored by
+    definition of the export format; reaction (tapback) lines are dropped
+    even when self-authored because they quote other people's words."""
     records: list[RawRecord] = []
     skipped_other = 0
     current: RawRecord | None = None
@@ -93,10 +123,16 @@ def parse_imessage(
             if current is not None and current_is_self:
                 records.append(current)
             ts_raw, sender, text = match.groups()
-            current_is_self = is_self(sender, identity)
+            current_is_self = (
+                sender.strip() == _SELF_SENDER or is_self(sender, identity)
+            )
             if not current_is_self:
                 skipped_other += 1
                 current = None
+                continue
+            if _REACTION_LINE.match(text):
+                current = None
+                current_is_self = False
                 continue
             current = RawRecord(
                 text=text,
@@ -131,14 +167,6 @@ class MessagesAdapter(SourceAdapter):
         for path in self.options.get("imessage_paths", []):
             if not os.path.exists(path):
                 continue
-            if not (
-                self.identity.get("phone_numbers") or self.identity.get("emails")
-            ):
-                self.warnings.append(
-                    f"{os.path.basename(path)}: identity.phone_numbers is empty, "
-                    "cannot attribute iMessage lines; file skipped"
-                )
-                continue
             with open(path, encoding="utf-8", errors="replace") as f:
                 raw = f.read()
             records, skipped = parse_imessage(
@@ -147,5 +175,12 @@ class MessagesAdapter(SourceAdapter):
             if skipped:
                 self.warnings.append(
                     f"{os.path.basename(path)}: skipped {skipped} lines from other senders"
+                )
+            if not (
+                self.identity.get("phone_numbers") or self.identity.get("emails")
+            ):
+                self.warnings.append(
+                    f"{os.path.basename(path)}: identity.phone_numbers is empty; "
+                    "only lines the exporter labeled 'Me' were attributed"
                 )
             yield from records

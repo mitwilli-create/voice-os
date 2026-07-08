@@ -51,10 +51,37 @@ def normalize_for_hash(text: str) -> str:
     return " ".join(text.split())
 
 
+# A sender string that is plausibly a phone number: an optional +, then
+# digits with common formatting (spaces, dashes, dots, parentheses).
+_PHONE_SENDER = re.compile(r"^\+?[0-9()\-. ]{7,}$")
+
+
+def _phone_digits(value: str) -> str:
+    return re.sub(r"\D", "", str(value))
+
+
+def _phones_match(alias_digits: str, sender_digits: str) -> bool:
+    """Digit-normalized comparison. Exact, or the same trailing ten
+    digits, so "+1 (555) 000-1111" in the config matches the export's
+    "+15550001111" and a bare "5550001111"."""
+    if not alias_digits or not sender_digits:
+        return False
+    if alias_digits == sender_digits:
+        return True
+    return (
+        len(alias_digits) >= 10
+        and len(sender_digits) >= 10
+        and alias_digits[-10:] == sender_digits[-10:]
+    )
+
+
 def is_self(name: str, identity: dict) -> bool:
-    """True when a sender string matches any configured alias (names,
-    usernames, emails, phone numbers). Substring match in both directions,
-    same behavior as the legacy extractors."""
+    """True when a sender string matches any configured alias.
+
+    Names, usernames, and emails use the legacy substring match in both
+    directions. Phone numbers are compared on digits only (see
+    _phones_match), and only when the sender itself is phone-shaped, so
+    digits embedded in an unrelated handle never count as a match."""
     if not name:
         return False
     needle = name.strip().lower()
@@ -64,12 +91,16 @@ def is_self(name: str, identity: dict) -> bool:
         identity.get("names", [])
         + identity.get("usernames", [])
         + identity.get("emails", [])
-        + identity.get("phone_numbers", [])
     )
     for alias in aliases:
         candidate = str(alias).strip().lower()
         if candidate and (candidate in needle or needle in candidate):
             return True
+    if _PHONE_SENDER.match(name.strip()):
+        sender_digits = _phone_digits(needle)
+        for alias in identity.get("phone_numbers", []):
+            if _phones_match(_phone_digits(alias), sender_digits):
+                return True
     return False
 
 

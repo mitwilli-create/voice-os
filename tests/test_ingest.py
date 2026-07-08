@@ -13,7 +13,7 @@ from ingest.cli import run_source
 from ingest.dedupe import Manifest
 from ingest.enrich import build_context
 from ingest.export import export_corpus
-from ingest.normalize import clean_text, decode_meta_text, normalize_for_hash
+from ingest.normalize import clean_text, decode_meta_text, is_self, normalize_for_hash
 from ingest.schema import content_hash
 from ingest.tiering import tier_for_chunk_year
 from voice_os.calibration import AUDIENCES, CHANNELS
@@ -487,6 +487,244 @@ def test_old_chunk_without_doc_type_key_still_loads():
     chunk = Chunk.from_dict(old)
     assert chunk.context.doc_type == ""
     assert chunk.to_dict()["context"]["doc_type"] == ""
+
+
+# --- silent-source regressions (docs/silent-sources.md) -----------------
+
+
+def test_is_self_matches_phone_number_formats():
+    """iMessage senders are E.164 strings; configured numbers may carry
+    country codes, parentheses, dashes, or spaces. Matching is on digits."""
+    identity = {"names": [], "usernames": [], "emails": [], "phone_numbers": ["+1 (555) 000-1111"]}
+    assert is_self("+15550001111", identity)
+    assert is_self("555-000-1111", identity)
+    assert is_self("15550001111", identity)
+    assert not is_self("+15559998888", identity)
+    # Digits embedded in a non-phone sender (spam email handles) never
+    # count as a phone match.
+    assert not is_self("user5550001111@example.com", identity)
+
+
+def test_imessage_me_lines_attributed_and_reactions_dropped():
+    """The line export labels the account owner's group-chat lines "Me".
+    Those are self-authored by definition of the format, even with no
+    phone identity configured. Tapback lines quote other people's words
+    and are dropped."""
+    raw = "\n".join(
+        [
+            "[2022-09-14 12:10:55] +15551234567: partner labeled line, direction unknown",
+            "[2022-09-15 06:35:46] Me: I will see you all tomorrow",
+            "[2022-09-15 06:35:50] Me: Loved “partner labeled line, direction unknown”",
+            "[2022-09-15 06:36:00] Me: Booked the Friday flight instead",
+            "with a continuation line",
+        ]
+    )
+    identity = {"names": ["Test Person"], "usernames": [], "emails": [], "phone_numbers": []}
+    records, skipped = parse_imessage(raw, identity, "f.txt", "f")
+    assert [r.text for r in records] == [
+        "I will see you all tomorrow",
+        "Booked the Friday flight instead\nwith a continuation line",
+    ]
+    assert skipped == 1
+    assert all(r.source_type == "imessage" for r in records)
+
+
+def test_imessage_tapback_must_quote_whole_message_prose_kept():
+    """Qodo round 1: a real tapback quotes the entire original message,
+    so the quoted form ends the line (or has no closing quote at all
+    because the original wraps onto continuation lines). Prose that
+    embeds a quoted title mid-sentence is real writing and must be kept."""
+    raw = "\n".join(
+        [
+            "[2022-09-14 12:00:00] Me: Loved “Full quoted message”",
+            "[2022-09-14 12:00:05] Me: Loved “Hamilton” last night with the crew",
+            "[2022-09-14 12:00:10] Me: Disliked “start of a wrapped original",
+            "continuation of the quoted original”",
+            "[2022-09-14 12:00:15] Me: Loved an image",
+            "[2022-09-14 12:00:20] Me: A normal closing message",
+        ]
+    )
+    identity = {"names": [], "usernames": [], "emails": [], "phone_numbers": []}
+    records, _ = parse_imessage(raw, identity, "f.txt", "f")
+    assert [r.text for r in records] == [
+        "Loved “Hamilton” last night with the crew",
+        "A normal closing message",
+    ]
+
+
+def test_imessage_phone_identity_attributes_sender_lines():
+    """A formatted configured number must match the export's E.164 sender."""
+    raw = "\n".join(
+        [
+            "[2022-09-14 12:10:55] +1 (555) 000-1111: sent from the owner handle",
+            "[2022-09-14 12:11:00] +15559998888: from someone else",
+        ]
+    )
+    records, skipped = parse_imessage(raw, TEST_IDENTITY, "f.txt", "f")
+    assert [r.text for r in records] == ["sent from the owner handle"]
+    assert skipped == 1
+
+
+def test_imessage_file_not_skipped_without_phone_identity(tmp_path):
+    """An empty identity.phone_numbers must not discard the whole file;
+    "Me" lines are still attributable."""
+    from ingest.adapters.messages_txt import MessagesAdapter
+
+    export = tmp_path / "imessages.txt"
+    export.write_text(
+        "[2022-09-14 12:10:55] Me: A message from the account owner\n",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, messages={"imessage_paths": [str(export)]})
+    config["identity"] = {"names": ["Test Person"], "usernames": [], "emails": [], "phone_numbers": []}
+    adapter = MessagesAdapter(config)
+    records = list(adapter.iter_records())
+    assert [r.text for r in records] == ["A message from the account owner"]
+
+
+def test_instagram_2026_activity_layout(tmp_path):
+    """2026 Meta exports put posts and stories under
+    your_instagram_activity/media/ and comments under
+    your_instagram_activity/comments/ with string_map_data payloads."""
+    import json as json_mod
+
+    base = tmp_path / "instagram-export"
+    media = base / "your_instagram_activity" / "media"
+    comments = base / "your_instagram_activity" / "comments"
+    media.mkdir(parents=True)
+    comments.mkdir(parents=True)
+    (media / "posts_1.json").write_text(
+        json_mod.dumps(
+            [
+                {"media": [{"title": "Single photo caption", "creation_timestamp": 1600000000}]},
+                {
+                    "title": "Album caption on the item",
+                    "creation_timestamp": 1600000100,
+                    "media": [
+                        {"title": "", "creation_timestamp": 1600000100},
+                        {"title": "", "creation_timestamp": 1600000101},
+                    ],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (media / "stories.json").write_text(
+        json_mod.dumps(
+            {
+                "ig_stories": [
+                    {"title": "Story overlay text", "creation_timestamp": 1600000200},
+                    {"title": "", "creation_timestamp": 1600000201},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (comments / "post_comments_1.json").write_text(
+        json_mod.dumps(
+            [
+                {
+                    "media_list_data": [{"uri": "media/posts/x.jpg"}],
+                    "string_map_data": {
+                        "Comment": {"value": "A post comment"},
+                        "Media Owner": {"value": "someone"},
+                        "Time": {"timestamp": 1600000300},
+                    },
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (comments / "reels_comments.json").write_text(
+        json_mod.dumps(
+            {
+                "comments_reels_comments": [
+                    {
+                        "string_map_data": {
+                            "Comment": {"value": "A reel comment"},
+                            "Time": {"timestamp": 1600000400},
+                        }
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = make_config(tmp_path, instagram={"paths": [str(base)]})
+    records = list(InstagramAdapter(config).iter_records())
+    by_type: dict[str, list] = {}
+    for r in records:
+        by_type.setdefault(r.source_type, []).append(r)
+    assert [r.text for r in by_type["ig_post"]] == [
+        "Single photo caption",
+        "Album caption on the item",
+    ], "album captions live on the item when per-media titles are empty"
+    assert [r.text for r in by_type["ig_story"]] == ["Story overlay text"]
+    assert sorted(r.text for r in by_type["ig_comment"]) == [
+        "A post comment",
+        "A reel comment",
+    ]
+    assert all(r.timestamp for r in by_type["ig_post"] + by_type["ig_comment"])
+
+
+def test_facebook_archived_stories_v2_skips_archive_notices(tmp_path):
+    """2026 Facebook exports key stories as archived_stories_v2 and stamp
+    every item with an auto-generated archive notice title; only authored
+    text may be ingested."""
+    import json as json_mod
+
+    base = tmp_path / "facebook-export"
+    stories = base / "your_facebook_activity" / "stories"
+    stories.mkdir(parents=True)
+    (stories / "archived_stories.json").write_text(
+        json_mod.dumps(
+            {
+                "archived_stories_v2": [
+                    {
+                        "title": "A photo from Test Person's story was added to his archive.",
+                        "timestamp": 1600000500,
+                    },
+                    {
+                        "title": "A video from Test Person's story was added to their archive.",
+                        "timestamp": 1600000550,
+                    },
+                    {"title": "Actual words typed on a story", "timestamp": 1600000600},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, facebook={"paths": [str(base)]})
+    records = list(FacebookAdapter(config).iter_records())
+    story_records = [r for r in records if r.source_type == "fb_story"]
+    assert [r.text for r in story_records] == ["Actual words typed on a story"]
+
+
+def test_instagram_rglob_only_matches_directories_inside_export(tmp_path):
+    """Qodo round 1: the recursive fallback must classify on directories
+    relative to the export root. A parent folder named "media" above the
+    export must not admit lookalike JSON outside the export's own
+    content directories."""
+    import json as json_mod
+
+    base = tmp_path / "media" / "instagram-export"
+    content = base / "your_instagram_activity" / "media"
+    content.mkdir(parents=True)
+    (content / "posts_1.json").write_text(
+        json_mod.dumps([{"media": [{"title": "Real caption", "creation_timestamp": 1600000000}]}]),
+        encoding="utf-8",
+    )
+    lookalike = base / "unrelated_report"
+    lookalike.mkdir()
+    (lookalike / "posts_1.json").write_text(
+        json_mod.dumps([{"media": [{"title": "Lookalike outside content dirs", "creation_timestamp": 1600000001}]}]),
+        encoding="utf-8",
+    )
+
+    config = make_config(tmp_path, instagram={"paths": [str(base)]})
+    records = [r for r in InstagramAdapter(config).iter_records() if r.source_type == "ig_post"]
+    assert [r.text for r in records] == ["Real caption"]
 
 
 def test_instagram_adapter_survives_symlinked_subdirectory(tmp_path):
