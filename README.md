@@ -2,7 +2,7 @@
 
 A personal voice operating system: six-axis voice scoring, register calibration mined from a personal corpus, dual-persona drafting, calibrated QA gates, and a measured evaluation harness. Built on Claude. `import voice_os; voice_os.draft(...)` returns a checkpointed, gate-approved draft in the author's voice.
 
-The engine began as the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization, a digital twin for a VP-level executive's communications calibrated on 6.9M+ words. That system is the provenance; this repo has since become the personal successor: the same architecture, recalibrated and extended on my own corpus (tens of thousands of provenance-tagged chunks spanning email, messages, social, professional documents, and on-camera transcripts).
+The engine began as the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization, a digital twin for a VP-level executive's communications calibrated on 6.9M+ words. That system is the provenance; this repo has since become the personal successor: the same architecture, recalibrated and extended on my own corpus: 143,000+ provenance-tagged chunks across 13 source types (sent email, iMessage and texts, Instagram DMs, posts, stories and comments, Facebook and Messenger, professional documents in nine subtypes from broadcast scripts to CVs to program charters, and on-camera transcripts with pacing signals).
 
 ---
 
