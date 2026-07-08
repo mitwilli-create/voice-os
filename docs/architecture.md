@@ -204,7 +204,7 @@ Baseline:
   Precision:   0.82
   Assertiveness: 0.76
 
-Example: Email to senior leadership (L7+) about a missed deadline:
+Example: Email to senior leadership (Senior Staff+) about a missed deadline:
   Formality:     +0.20 → 0.64
   Assertiveness: -0.10 → 0.66
   Warmth:        +0.15 → 0.77 (error acknowledgment)
