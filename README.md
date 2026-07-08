@@ -1,6 +1,6 @@
 # voice-os
 
-A personal voice operating system: six-axis voice scoring, register calibration mined from a personal corpus, dual-persona drafting, calibrated QA gates, and a measured evaluation harness. Built on Claude. `import voice_os; voice_os.draft(...)` returns a checkpointed, gate-approved draft in the author's voice.
+A personal voice operating system: six-axis voice scoring, register calibration mined from a personal corpus, dual-persona drafting, calibrated QA gates, and a measured evaluation harness. Built on Claude. `import voice_os; voice_os.draft(...)` returns a checkpointed draft in the author's voice with an explicit gate decision: pass, or reject when the bounded revision loop cannot clear the bar.
 
 The engine began as the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization, a digital twin for a VP-level executive's communications calibrated on 6.9M+ words. That system is the provenance; this repo has since become the personal successor: the same architecture, recalibrated and extended on my own corpus: 143,000+ provenance-tagged chunks across 13 source types (sent email, iMessage and texts, Instagram DMs, posts, stories and comments, Facebook and Messenger, professional documents in nine subtypes from broadcast scripts to CVs to program charters, and on-camera transcripts with pacing signals).
 
@@ -94,11 +94,11 @@ One canonical axis set is used everywhere (scoring baseline, calibration target,
 
 Shipped and measured: the callable layer (`voice_os.draft()`), the extended context model (audience, medium, goal, stakes, tone), mined per-context calibration including data-driven QA-gate thresholds, exemplar and KB fusion into live persona prompts, an evaluation harness with a locked regression baseline, and provenance-stamped, SQLite-checkpointed runs.
 
-The personal corpus itself (chunk stores under `corpus/`, raw exports under `sources/`, mined artifacts, KB snapshots) is local-only and gitignored; layered privacy gates (gitignore, pre-commit and pre-push hooks) keep personal data out of the repo. Sample data in `data/` is synthetic but structurally representative, and the whole test suite runs against it.
+The personal corpus itself (chunk stores under `corpus/`, raw exports under `sources/`, mined artifacts, KB snapshots) is local-only and gitignored; layered privacy gates (gitignore plus pre-commit and pre-push hooks, active once a clone enables them via `git config core.hooksPath .githooks`) keep personal data out of the repo. Sample data in `data/` is synthetic but structurally representative, and the whole test suite runs against it.
 
 Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key; with credentials, the generative and adversarial personas run on Claude.
 
-**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Checkpoints contain draft and exemplar text and live under the gitignored `var/` directory.
+**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Checkpoints contain draft and exemplar text; they live under the gitignored `var/` directory by default, or wherever `var_dir` / `VOICE_OS_VAR_DIR` points, so keep overrides outside tracked paths.
 
 Tests: `python -m pytest tests/` runs the full suite (offline, no API key needed). The core scoring tests also run dependency-free via `python -m unittest discover -s tests -v`.
 
