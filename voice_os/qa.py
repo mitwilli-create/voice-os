@@ -46,6 +46,34 @@ def find_banned(text: str, banned: list[str]) -> list[str]:
     return [p for p in banned if re.search(r"\b" + re.escape(p) + r"\b", lowered)]
 
 
+# Em dashes are banned in all outward material (house style: hyphens,
+# colons, or restructure). The phrase gate above cannot catch them
+# reliably (a space-padded dash has no \b word boundary), and asking a
+# persona to remove one would spend a revision cycle on what a regex
+# fixes deterministically, so they are scrubbed at the source instead:
+# every persona output passes through scrub_em_dashes before it enters
+# the pipeline (voice_os/personas.py).
+_EM_DASH_RUN = re.compile(r"[ \t]*—+[ \t]*")
+
+
+def scrub_em_dashes(text: str) -> str:
+    """Deterministically replace em dashes with the spaced-hyphen form.
+
+    Each run of em dashes (with any surrounding spaces or tabs) becomes
+    " - "; newlines are never touched. A dash that opened a line keeps
+    the line flush; a dash left dangling at a line end is dropped.
+    """
+    if "—" not in text:
+        return text
+    scrubbed = _EM_DASH_RUN.sub(" - ", text)
+    scrubbed = re.sub(r"(?m)^ - ", "- ", scrubbed)
+    scrubbed = re.sub(r"(?m) - $", "", scrubbed)
+    # A dash that ran straight into punctuation was decorative; drop it
+    # rather than leave a space before the mark ("word—." -> "word.").
+    scrubbed = re.sub(r" - ([,.;:!?)])", r"\1", scrubbed)
+    return scrubbed
+
+
 @dataclass
 class GateResult:
     decision: str                      # "pass" or "cycle"

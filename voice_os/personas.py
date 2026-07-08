@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 
 from .axes import AXES, score_text
-from .qa import REPLACEMENTS, find_banned
+from .qa import REPLACEMENTS, find_banned, scrub_em_dashes
 
 _GENERATIVE_SYSTEM = (
     "You are the generative persona in a voice-fidelity pipeline. Revise the "
@@ -54,7 +54,14 @@ class GenerativePersona:
         prompt = f"{_profile_block(target, signals, banned)}\n\nDraft:\n{draft}"
         revised = llm.complete(_GENERATIVE_SYSTEM, prompt)
         if revised:
-            return PersonaResult(text=revised, notes=["revised by Claude"], mode="live")
+            # Live models emit em dashes (measured at 0.444 of drafts in
+            # the first live harness run); the house ban makes this a
+            # deterministic scrub, never a revision signal.
+            return PersonaResult(
+                text=scrub_em_dashes(revised),
+                notes=["revised by Claude"],
+                mode="live",
+            )
         return self._offline_revise(draft, target, banned)
 
     def _offline_revise(self, draft: str, target: dict[str, float],
@@ -85,7 +92,11 @@ class GenerativePersona:
                           r"\2", text, flags=re.IGNORECASE)
         text = re.sub(r"(^|[.!?]\s+)([a-z])",
                       lambda m: m.group(1) + m.group(2).upper(), text)
-        return PersonaResult(text=text.strip(), notes=notes, mode="offline")
+        # Same outward-ban scrub as the live path: an em dash arriving
+        # in the input draft must not survive an offline revision either.
+        return PersonaResult(
+            text=scrub_em_dashes(text.strip()), notes=notes, mode="offline"
+        )
 
 
 class AdversarialPersona:

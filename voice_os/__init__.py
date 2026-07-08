@@ -16,7 +16,14 @@ from .contexts import GOALS, MEDIA, STAKES, VoiceContext, infer_stakes
 from .corpus import CorpusEntry, build_baseline, parse_corpus
 from .holdout import is_holdout
 from .personas import AdversarialPersona, GenerativePersona
-from .qa import GateResult, find_banned, gate, gate_extended, load_banned_list
+from .qa import (
+    GateResult,
+    find_banned,
+    gate,
+    gate_extended,
+    load_banned_list,
+    scrub_em_dashes,
+)
 from .tone import TONE_METRICS, ToneProfile, derive_metrics, tone_signals
 
 __version__ = "0.2.0"
@@ -59,7 +66,10 @@ def run_cycles(
     generative = GenerativePersona()
     adversarial = AdversarialPersona()
 
-    text = draft_text
+    # Boundary scrub: an already-in-voice draft can pass the gate at
+    # cycle 0 without any persona running, so the outward em-dash ban
+    # must hold on the input itself, not only on persona outputs.
+    text = scrub_em_dashes(draft_text)
     cycles: list[dict] = []
     modes: set[str] = set()
     result: GateResult | None = None
@@ -102,7 +112,12 @@ def run_cycles(
         cycles.append(record)
         text = revision.text
 
-    return cycles, result, text, modes
+    # Return-boundary scrub: with the entry scrub and persona-output
+    # scrubs this is a no-op today (scrub_em_dashes is idempotent), but
+    # it makes "returned text never contains an em dash" a local
+    # invariant of this function rather than a property every mutation
+    # path must individually preserve.
+    return cycles, result, scrub_em_dashes(text), modes
 
 
 def run_pipeline(
