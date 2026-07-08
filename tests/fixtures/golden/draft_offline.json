@@ -1,0 +1,73 @@
+{
+  "banned_hits": [],
+  "context": {
+    "audience": "leadership",
+    "channel": "email",
+    "goal": "set-expectations",
+    "medium": null,
+    "situation": "standard",
+    "stakes": "high"
+  },
+  "decision": "reject",
+  "fidelity": {
+    "overall": 0.677,
+    "per_axis": {
+      "editorial_register": 0.475,
+      "escalation_pattern": 1.0,
+      "hedging_behavior": 0.986,
+      "rhetorical_pace": 0.474,
+      "risk_tolerance": 0.701,
+      "sentence_rhythm": 0.427
+    }
+  },
+  "kb": {
+    "bundle_hash": "c6fe09bdf48ee81f828bfd85896e9a0581b4bf0253f91efcb550c7c78c3fd488",
+    "files": [
+      "Test-Person-System-Instructions_2026-01-20.md",
+      "test-person-voice-os-compact_2026-01-19.json"
+    ],
+    "snapshot_id": "<snapshot-id>",
+    "status": "ok"
+  },
+  "mode": "offline",
+  "output_text": "About the launch. Let me know with questions.",
+  "provenance": {
+    "artifacts": {
+      "context_profiles": {
+        "generated_at": "2026-07-07T12:00:00",
+        "miner": "mine.tone_norms@1.0"
+      },
+      "recipient_deltas": {
+        "generated_at": "2026-07-07T12:00:00",
+        "miner": "mine.recipients@1.0"
+      }
+    },
+    "corpus": {
+      "bytes": 3063,
+      "path": "<corpus-path>",
+      "sha256": "b820127da62c8c620da1c54bffec661e4baaaf10f1dc7ec77b94da87151dcf11"
+    },
+    "kb_bundle_hash": "c6fe09bdf48ee81f828bfd85896e9a0581b4bf0253f91efcb550c7c78c3fd488",
+    "live_model": null,
+    "voice_os_version": "<voice-os-version>"
+  },
+  "revision_history": [
+    "I wanted to reach out about the launch. Let me know with questions.",
+    "About the launch. Let me know with questions."
+  ],
+  "revisions": 2,
+  "run_id": "<run-id>",
+  "trace": [
+    "prepare: context resolved (sources: {'channel': 'heuristic', 'medium': 'absent', 'audience': 'heuristic', 'recipient': 'absent', 'situation': 'heuristic', 'stakes': 'heuristic', 'goal': 'heuristic', 'tone': 'mined', 'exemplars': 'absent'})",
+    "prepare: kb snapshot <snapshot-id> (2 files)",
+    "generate: mode=offline, notes=2",
+    "critique: 2 findings (mode=offline)",
+    "qa_gate: gate=cycle -> revise (fidelity 0.638, revision 0)",
+    "revise: revision 1 (mode=offline, 8 signals)",
+    "critique: 0 findings (mode=offline)",
+    "qa_gate: gate=cycle -> revise (fidelity 0.677, revision 1)",
+    "revise: revision 2 (mode=offline, 7 signals)",
+    "critique: 0 findings (mode=offline)",
+    "qa_gate: gate=cycle -> reject (fidelity 0.677, revision 2)"
+  ]
+}

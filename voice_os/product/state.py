@@ -42,6 +42,10 @@ class VoiceState(TypedDict):
     banned: list[str]
     guidance: list[str]
     kb_meta: dict
+    # reproducibility metadata (docs/determinism.md hardening items 2-3):
+    # voice_os version, mined artifact versions, KB bundle hash, corpus
+    # content identity, and the live model id when any persona ran live
+    provenance: dict
 
     # working
     current_draft: str
@@ -100,6 +104,7 @@ def initial_state(
         "banned": [],
         "guidance": [],
         "kb_meta": {},
+        "provenance": {},
         "current_draft": "",
         "critique_feedback": "",
         "qa_decision": "revise",
@@ -134,5 +139,6 @@ def build_result(state: dict, run_id: str) -> dict:
             "medium": state.get("medium"),
         },
         "kb": state.get("kb_meta", {}),
+        "provenance": dict(state.get("provenance", {})),
         "trace": list(state.get("trace_notes", [])),
     }

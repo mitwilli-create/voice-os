@@ -1,0 +1,185 @@
+{
+  "baseline": {
+    "mean": {
+      "editorial_register": 0.207,
+      "escalation_pattern": 0.5,
+      "hedging_behavior": 0.16,
+      "rhetorical_pace": 0.87,
+      "risk_tolerance": 0.841,
+      "sentence_rhythm": 0.513
+    },
+    "std": {
+      "editorial_register": 0.219,
+      "escalation_pattern": 0.143,
+      "hedging_behavior": 0.356,
+      "rhetorical_pace": 0.095,
+      "risk_tolerance": 0.349,
+      "sentence_rhythm": 0.205
+    }
+  },
+  "classification": {
+    "audience": "peer",
+    "channel": "email",
+    "situation": "standard"
+  },
+  "cycles": [
+    {
+      "adversarial_findings": [
+        "risk_tolerance far from target (0.37 vs 0.84)",
+        "sentence_rhythm far from target (0.86 vs 0.51)",
+        "hedging_behavior far from target (0.47 vs 0.16)",
+        "editorial_register far from target (0.51 vs 0.21)"
+      ],
+      "axis_scores": {
+        "editorial_register": 0.483,
+        "escalation_pattern": 0.5,
+        "hedging_behavior": 0.762,
+        "rhetorical_pace": 0.45,
+        "risk_tolerance": 0.39,
+        "sentence_rhythm": 0.692
+      },
+      "banned_hits": [
+        "i hope this email finds you well",
+        "i wanted to reach out",
+        "touch base",
+        "circle back",
+        "leverage",
+        "synergy",
+        "deep dive",
+        "at your earliest convenience",
+        "please don't hesitate to reach out",
+        "moving forward",
+        "keep the lines of communication open"
+      ],
+      "cycle": 0,
+      "decision": "cycle",
+      "fidelity": 0.407,
+      "generative_notes": [
+        "removed banned phrase 'i hope this email finds you well'",
+        "removed banned phrase 'i wanted to reach out'",
+        "replaced banned phrase 'touch base'",
+        "replaced banned phrase 'circle back'",
+        "replaced banned phrase 'leverage'",
+        "replaced banned phrase 'synergy'",
+        "replaced banned phrase 'deep dive'",
+        "replaced banned phrase 'at your earliest convenience'",
+        "replaced banned phrase 'please don't hesitate to reach out'",
+        "replaced banned phrase 'moving forward'",
+        "removed banned phrase 'keep the lines of communication open'",
+        "stripped hedging qualifiers"
+      ],
+      "per_axis_fidelity": {
+        "editorial_register": 0.37,
+        "escalation_pattern": 1.0,
+        "hedging_behavior": 0.154,
+        "rhetorical_pace": 0.0,
+        "risk_tolerance": 0.354,
+        "sentence_rhythm": 0.563
+      },
+      "revision_signals": [
+        "remove banned phrase: 'i hope this email finds you well'",
+        "remove banned phrase: 'i wanted to reach out'",
+        "remove banned phrase: 'touch base'",
+        "remove banned phrase: 'circle back'",
+        "remove banned phrase: 'leverage'",
+        "remove banned phrase: 'synergy'",
+        "remove banned phrase: 'deep dive'",
+        "remove banned phrase: 'at your earliest convenience'",
+        "remove banned phrase: 'please don't hesitate to reach out'",
+        "remove banned phrase: 'moving forward'",
+        "remove banned phrase: 'keep the lines of communication open'",
+        "raise rhetorical_pace: draft 0.45 vs target 0.87",
+        "lower hedging_behavior: draft 0.76 vs target 0.16",
+        "raise risk_tolerance: draft 0.39 vs target 0.84",
+        "lower editorial_register: draft 0.48 vs target 0.21"
+      ]
+    },
+    {
+      "adversarial_findings": [
+        "risk_tolerance far from target (0.35 vs 0.84)",
+        "sentence_rhythm far from target (0.92 vs 0.51)",
+        "editorial_register far from target (0.52 vs 0.21)"
+      ],
+      "axis_scores": {
+        "editorial_register": 0.511,
+        "escalation_pattern": 0.5,
+        "hedging_behavior": 0.472,
+        "rhetorical_pace": 0.9,
+        "risk_tolerance": 0.371,
+        "sentence_rhythm": 0.862
+      },
+      "banned_hits": [],
+      "cycle": 1,
+      "decision": "cycle",
+      "fidelity": 0.531,
+      "generative_notes": [
+        "stripped hedging qualifiers"
+      ],
+      "per_axis_fidelity": {
+        "editorial_register": 0.306,
+        "escalation_pattern": 1.0,
+        "hedging_behavior": 0.562,
+        "rhetorical_pace": 0.842,
+        "risk_tolerance": 0.327,
+        "sentence_rhythm": 0.149
+      },
+      "revision_signals": [
+        "lower sentence_rhythm: draft 0.86 vs target 0.51",
+        "lower editorial_register: draft 0.51 vs target 0.21",
+        "raise risk_tolerance: draft 0.37 vs target 0.84"
+      ]
+    },
+    {
+      "axis_scores": {
+        "editorial_register": 0.524,
+        "escalation_pattern": 0.5,
+        "hedging_behavior": 0.245,
+        "rhetorical_pace": 0.9,
+        "risk_tolerance": 0.346,
+        "sentence_rhythm": 0.921
+      },
+      "banned_hits": [],
+      "cycle": 2,
+      "decision": "cycle",
+      "fidelity": 0.549,
+      "per_axis_fidelity": {
+        "editorial_register": 0.276,
+        "escalation_pattern": 1.0,
+        "hedging_behavior": 0.881,
+        "rhetorical_pace": 0.842,
+        "risk_tolerance": 0.291,
+        "sentence_rhythm": 0.005
+      },
+      "revision_signals": [
+        "lower sentence_rhythm: draft 0.92 vs target 0.51",
+        "lower editorial_register: draft 0.52 vs target 0.21",
+        "raise risk_tolerance: draft 0.35 vs target 0.84"
+      ]
+    }
+  ],
+  "final": {
+    "decision": "cycle",
+    "fidelity": 0.549,
+    "output_text": "To talk regarding the project timeline. We could use some alignment between our teams to do a closer look on the remaining blockers, and we might be able to follow up on the deliverables when you can. Let me know if you have any questions. From here, it would be great."
+  },
+  "meta": {
+    "canonical_axes": [
+      "rhetorical_pace",
+      "risk_tolerance",
+      "sentence_rhythm",
+      "escalation_pattern",
+      "hedging_behavior",
+      "editorial_register"
+    ],
+    "mode": "offline",
+    "voice_os_version": "<voice-os-version>"
+  },
+  "target_profile": {
+    "editorial_register": 0.207,
+    "escalation_pattern": 0.5,
+    "hedging_behavior": 0.16,
+    "rhetorical_pace": 0.87,
+    "risk_tolerance": 0.841,
+    "sentence_rhythm": 0.513
+  }
+}

@@ -151,11 +151,19 @@ def run_pipeline(
         extra_signals=extra_signals,
     )
 
+    live = "live" in modes
+    if live:
+        from .llm import DEFAULT_MODEL
+
     return {
         "meta": {
             "voice_os_version": __version__,
-            "mode": "live" if "live" in modes else "offline",
+            "mode": "live" if live else "offline",
             "canonical_axes": list(AXES),
+            # Engine stamp appears only on live runs, so the offline
+            # default output stays byte-identical to the golden lock
+            # (docs/determinism.md hardening item 3).
+            **({"model": DEFAULT_MODEL} if live else {}),
         },
         "classification": {
             "channel": channel,
