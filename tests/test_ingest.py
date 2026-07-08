@@ -398,6 +398,52 @@ def test_video_adapter_srt_keeps_wpm_and_doc_type(tmp_path):
     assert 20 < records[0].extra["words_per_minute"] < 26
 
 
+def test_video_adapter_keeps_computed_zero_wpm(tmp_path):
+    """Qodo round 1: a computed 0.0 WPM is real pacing data and must not
+    be dropped by a truthiness check; only None (no timing) is dropped."""
+    from ingest.adapters.video import VideoAdapter
+
+    slow = tmp_path / "transcripts"
+    slow.mkdir()
+    (slow / "2024-03-01-slow.srt").write_text(
+        "1\n00:00:00,000 --> 00:30:00,000\nhello\n",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, video={"transcript_paths": [str(slow)]})
+    records = list(VideoAdapter(config).iter_records())
+    assert len(records) == 1
+    assert records[0].extra["words_per_minute"] == 0.0
+
+
+def test_chunk_index_is_metadata_not_tone_signal(tmp_path):
+    """Qodo round 1: numeric bookkeeping like chunk_index belongs in
+    context.extra; tone_signals carries style metrics like WPM only."""
+    import json as json_mod
+
+    from ingest.adapters.video import VideoAdapter
+
+    tdir = tmp_path / "transcripts"
+    tdir.mkdir()
+    (tdir / "2024-04-01-clip.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:30,000\n"
+        "A short clip transcript with a handful of spoken words in it.\n",
+        encoding="utf-8",
+    )
+    config = make_config(tmp_path, video={"transcript_paths": [str(tdir)]})
+    corpus_dir = config["corpus_dir"]
+    manifest = Manifest(os.path.join(corpus_dir, "manifest.json"))
+    run_source(VideoAdapter(config), manifest, corpus_dir)
+
+    with open(os.path.join(corpus_dir, "chunks", "video.jsonl"), encoding="utf-8") as f:
+        chunks = [json_mod.loads(line) for line in f]
+    assert chunks
+    for chunk in chunks:
+        assert chunk["context"]["extra"]["chunk_index"] == 0
+        assert "chunk_index" not in chunk["context"]["tone_signals"]
+        assert chunk["context"]["tone_signals"]["words_per_minute"] > 0
+        assert "words_per_minute" not in chunk["context"]["extra"]
+
+
 def test_combined_sent_gets_message_source_type_not_email():
     with open(os.path.join(FIXTURES, "combined_sent_sample.txt"), encoding="utf-8") as f:
         raw = f.read()

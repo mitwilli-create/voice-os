@@ -97,8 +97,10 @@ class VideoAdapter(SourceAdapter):
                 split_paragraph_chunks(text, max_words)
             ):
                 extra: dict = {"chunk_index": i}
-                if wpm:
-                    # File-level pacing; every chunk of the file inherits it.
+                if wpm is not None:
+                    # File-level pacing; every chunk of the file inherits
+                    # it. A computed 0.0 (very slow pacing) is real data,
+                    # so only None (no timing info) is dropped.
                     extra["words_per_minute"] = wpm
                 yield RawRecord(
                     text=chunk_text,
