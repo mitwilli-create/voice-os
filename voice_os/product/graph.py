@@ -15,6 +15,7 @@ Design: docs/callable-layer.md.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import uuid
@@ -25,6 +26,7 @@ from datetime import datetime, timezone
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
+from .. import llm
 from ..axes import AxisProfile, score_text
 from ..model import VoiceModel
 from ..personas import AdversarialPersona, GenerativePersona
@@ -77,6 +79,86 @@ def _merge_modes(state: VoiceState, mode: str) -> list[str]:
     modes = set(state.get("persona_modes", []))
     modes.add(mode)
     return sorted(modes)
+
+
+def _display_path(path: str) -> str:
+    """Machine-neutral form of a filesystem path for the envelope.
+
+    Absolute local paths are metadata leakage when envelopes or
+    checkpoints leave the machine, so provenance records the
+    repo-relative path for files under the repo and just the basename
+    otherwise. sha256 + bytes remain the reproducibility identity.
+    """
+    absolute = os.path.abspath(path)
+    root = os.path.join(REPO_ROOT, "")
+    if absolute.startswith(root):
+        return os.path.relpath(absolute, REPO_ROOT)
+    return os.path.basename(absolute)
+
+
+# Bounded memo of corpus content hashes keyed by (path, size, mtime_ns):
+# the corpus is already read once per model load, so the provenance hash
+# should not add a second full-file read on every draft() call. A stat
+# change invalidates the entry; same sizing rationale as _MODELS.
+_IDENTITY_CACHE_MAX = 4
+_IDENTITY_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+
+
+def _corpus_identity(path: str) -> dict:
+    """Content identity of the corpus file: path + sha256 + byte size.
+
+    Content hash (not mtime) is the documented identity choice: mtime
+    varies across clones and copies of byte-identical content, which
+    would break reproducibility comparisons across machines
+    (docs/determinism.md hardening item 2). The hash is memoized on
+    the file's stat identity so repeated draft() calls do not re-read
+    an unchanged corpus.
+    """
+    try:
+        stat = os.stat(path)
+    except OSError:
+        # Model load already surfaced the real error, if any.
+        return {"path": _display_path(path), "sha256": None, "bytes": None}
+    key = (path, stat.st_size, stat.st_mtime_ns)
+    if key in _IDENTITY_CACHE:
+        _IDENTITY_CACHE.move_to_end(key)
+        return dict(_IDENTITY_CACHE[key])
+
+    digest = hashlib.sha256()
+    total_bytes = 0
+    try:
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(65536), b""):
+                digest.update(block)
+                total_bytes += len(block)
+    except OSError:
+        return {"path": _display_path(path), "sha256": None, "bytes": None}
+    identity = {
+        "path": _display_path(path),
+        "sha256": digest.hexdigest(),
+        "bytes": total_bytes,
+    }
+    _IDENTITY_CACHE[key] = dict(identity)
+    while len(_IDENTITY_CACHE) > _IDENTITY_CACHE_MAX:
+        _IDENTITY_CACHE.popitem(last=False)
+    return identity
+
+
+def _stamp_live_model(state: VoiceState, mode: str) -> dict:
+    """Provenance update recording the engine that served a live call.
+
+    Records the resolved model id (VOICE_OS_MODEL / DEFAULT_MODEL) the
+    moment any persona reports mode "live", so checkpoints and the
+    envelope are auditable to the exact engine
+    (docs/determinism.md hardening item 3). Offline runs keep
+    live_model None. Returns {} when there is nothing to record so
+    callers can splat it into their partial state update.
+    """
+    if mode != "live":
+        return {}
+    provenance = dict(state.get("provenance", {}))
+    provenance["live_model"] = llm.DEFAULT_MODEL
+    return {"provenance": provenance}
 
 
 def new_run_id() -> str:
@@ -137,6 +219,15 @@ def prepare(state: VoiceState) -> dict:
     if drift_flags:
         notes.append(f"prepare: drift flags active: {drift_flags}")
 
+    corpus_path = state.get("corpus_path") or _LOAD_DEFAULTS["corpus_path"]
+    provenance = {
+        "voice_os_version": q.meta.get("voice_os_version"),
+        "artifacts": q.meta.get("artifacts") or {},
+        "kb_bundle_hash": kb_meta.get("bundle_hash"),
+        "corpus": _corpus_identity(corpus_path),
+        "live_model": None,
+    }
+
     return {
         "target_profile": dict(q.target_profile),
         "baseline_mean": dict(model.baseline.mean),
@@ -146,6 +237,7 @@ def prepare(state: VoiceState) -> dict:
         "banned": list(q.banned),
         "guidance": list(q.guidance),
         "kb_meta": kb_meta,
+        "provenance": provenance,
         "current_draft": state["input_text"],
         "revision_count": 0,
         "trace_notes": notes,
@@ -164,6 +256,7 @@ def generate(state: VoiceState) -> dict:
     return {
         "current_draft": result.text,
         "persona_modes": _merge_modes(state, result.mode),
+        **_stamp_live_model(state, result.mode),
         "trace_notes": [
             f"generate: mode={result.mode}, notes={len(result.notes)}"
         ],
@@ -179,6 +272,7 @@ def critique(state: VoiceState) -> dict:
     return {
         "critique_feedback": "\n".join(result.notes),
         "persona_modes": _merge_modes(state, result.mode),
+        **_stamp_live_model(state, result.mode),
         "trace_notes": [
             f"critique: {len(result.notes)} findings (mode={result.mode})"
         ],
@@ -250,6 +344,7 @@ def revise(state: VoiceState) -> dict:
         "revision_count": state["revision_count"] + 1,
         "revision_history": [state["current_draft"]],
         "persona_modes": _merge_modes(state, result.mode),
+        **_stamp_live_model(state, result.mode),
         "trace_notes": [
             f"revise: revision {state['revision_count'] + 1} "
             f"(mode={result.mode}, {len(signals)} signals)"

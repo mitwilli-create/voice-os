@@ -139,10 +139,16 @@ class VoiceModel:
             self.baseline, q.target_profile, draft, q.banned, max_cycles,
             extra_signals=q.guidance, tone_profile=q.tone,
         )
+        live = "live" in modes
+        if live:
+            from .llm import DEFAULT_MODEL
         return {
             "meta": {
                 **q.meta,
-                "mode": "live" if "live" in modes else "offline",
+                "mode": "live" if live else "offline",
+                # Engine stamp on live runs only; offline output is
+                # unchanged (docs/determinism.md hardening item 3).
+                **({"model": DEFAULT_MODEL} if live else {}),
             },
             "classification": q.context,
             "sources": q.sources,

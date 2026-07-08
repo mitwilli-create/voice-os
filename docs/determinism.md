@@ -30,12 +30,43 @@ items scheduled before the evolution/drift module lands.
   re-reading the corpus.
 - **Stable iteration.** File globs are sorted, hash concatenation is
   name-sorted, exemplar selection is a bounded deterministic heap.
-- **Regression coverage today.** `run_pipeline`'s default-output
-  behavior is pinned by offline tests asserting selected fields
-  (decision, fidelity bounds, and exact `output_text` in specific
-  cases), with synthetic fixtures. This is invariant coverage, not yet
-  a full golden snapshot of the output envelope; the full golden locks
-  are hardening item 1 below.
+- **Regression coverage today.** Two full golden snapshots
+  (`tests/fixtures/golden/`) lock the complete output envelopes on the
+  synthetic fixture corpus: `run_pipeline`'s default output and the
+  offline `draft()` envelope, each minus the documented run-scoped
+  fields. The earlier selected-field invariants in
+  `tests/test_voice_os.py` and `tests/test_product.py` remain as
+  behavior documentation. Regenerate after an intentional change with
+  `python3 tests/regen_goldens.py` and review the golden diff in the
+  PR.
+- **Standing determinism invariant.** `tests/test_determinism.py` runs
+  every offline pure surface twice in-process and asserts
+  byte-identical canonical JSON: `score_text`, `calibrate_extended`,
+  `gate_extended`, `run_pipeline`, all four miners on a synthetic
+  chunk set (minus `generated_at`, the artifact envelope's run-scoped
+  field), the eval scorecard, `load_kb`, and the normalized `draft()`
+  envelope.
+- **Provenance in every draft() envelope and checkpoint.** The prepare
+  node seeds a serializable `provenance` field carried through
+  checkpoints into the result envelope: voice_os version, mined
+  artifact versions (`generated_at` + miner id per artifact), the KB
+  bundle hash, and the corpus content identity as path + sha256 +
+  byte size. Content hash rather than mtime is the documented
+  identity choice: mtime differs across clones and copies of
+  byte-identical content. The recorded path is machine-neutral
+  (repo-relative for files under the repo, basename otherwise) so
+  envelopes and checkpoints never leak absolute local paths, and the
+  hash is memoized on the file's stat identity so repeated draft()
+  calls do not re-read an unchanged corpus.
+- **Live-run engine stamping.** The moment any persona reports mode
+  "live", the resolved model id (`VOICE_OS_MODEL` /
+  `llm.DEFAULT_MODEL`) is recorded into `provenance.live_model`;
+  offline runs keep it `null`. `run_pipeline` and `VoiceModel.run`
+  gain a `meta.model` stamp on live runs only, so their offline
+  default output stays byte-identical to the golden lock. Generation
+  parameters are recorded, not changed: no explicit temperature is
+  pinned (stability-vs-persona-quality tradeoff, decided separately
+  if ever).
 
 ## What live mode guarantees instead
 
@@ -56,28 +87,24 @@ a fixture corpus, the eval scorecard, `load_kb` bundle hashes. Any
 diff outside the documented run-scoped fields is a determinism
 regression.
 
-## Scheduled hardening (Phase 0 of the evolution-module sequence)
+## Hardening status (Phase 0 of the evolution-module sequence: SHIPPED)
 
-1. **Full golden-regression locks.** Add true golden snapshots of the
-   complete output envelopes, minus run-scoped fields, on the
-   synthetic fixture corpus: one for `run_pipeline`'s default output
-   (upgrading today's selected-field invariants) and one for the
-   offline `draft()` envelope (currently unlocked).
-2. **Provenance in the envelope and checkpoints.** `QueryResult.meta`
-   carries the voice_os version and mined-artifact versions, but the
-   prepare node does not copy it into state. Add a serializable
-   provenance field: voice_os version, mined artifact versions, KB
-   bundle hash, corpus file identity.
-3. **Live-run engine stamping.** `llm.complete` sends no explicit
-   temperature and nothing records which model id served a live run.
-   Record the resolved model id into provenance whenever any persona
-   reports mode "live". Default to recording generation parameters,
-   not changing them; pinning temperature is a separate decision with
-   a stability-vs-quality tradeoff.
-4. **Standing determinism invariant test.** Run the offline pure
-   surfaces twice in-process and assert byte-identical results, so a
-   future change cannot silently introduce wall-clock, dict-order, or
-   RNG dependence.
+All four scheduled items landed 2026-07-07 and are described in the
+guarantees above:
+
+1. Full golden-regression locks: `tests/fixtures/golden/` +
+   `tests/test_determinism.py`, regenerated via
+   `python3 tests/regen_goldens.py`.
+2. Provenance in the envelope and checkpoints: seeded by the prepare
+   node in `voice_os/product/graph.py`, projected by `build_result`.
+3. Live-run engine stamping: `provenance.live_model` (graph) and
+   `meta.model` (`run_pipeline` / `VoiceModel.run`), live runs only.
+4. Standing determinism invariant test: the double-run section of
+   `tests/test_determinism.py`.
+
+The pre-hardening audit (double-run census, 2026-07-07) found all 12
+surfaces byte-identical; the items above closed the coverage and
+metadata gaps rather than live nondeterminism.
 
 ## Rules for new modules
 
