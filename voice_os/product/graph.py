@@ -81,24 +81,66 @@ def _merge_modes(state: VoiceState, mode: str) -> list[str]:
     return sorted(modes)
 
 
+def _display_path(path: str) -> str:
+    """Machine-neutral form of a filesystem path for the envelope.
+
+    Absolute local paths are metadata leakage when envelopes or
+    checkpoints leave the machine, so provenance records the
+    repo-relative path for files under the repo and just the basename
+    otherwise. sha256 + bytes remain the reproducibility identity.
+    """
+    absolute = os.path.abspath(path)
+    root = os.path.join(REPO_ROOT, "")
+    if absolute.startswith(root):
+        return os.path.relpath(absolute, REPO_ROOT)
+    return os.path.basename(absolute)
+
+
+# Bounded memo of corpus content hashes keyed by (path, size, mtime_ns):
+# the corpus is already read once per model load, so the provenance hash
+# should not add a second full-file read on every draft() call. A stat
+# change invalidates the entry; same sizing rationale as _MODELS.
+_IDENTITY_CACHE_MAX = 4
+_IDENTITY_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+
+
 def _corpus_identity(path: str) -> dict:
     """Content identity of the corpus file: path + sha256 + byte size.
 
     Content hash (not mtime) is the documented identity choice: mtime
     varies across clones and copies of byte-identical content, which
     would break reproducibility comparisons across machines
-    (docs/determinism.md hardening item 2).
+    (docs/determinism.md hardening item 2). The hash is memoized on
+    the file's stat identity so repeated draft() calls do not re-read
+    an unchanged corpus.
     """
-    identity: dict = {"path": path, "sha256": None, "bytes": None}
     try:
-        digest = hashlib.sha256()
+        stat = os.stat(path)
+    except OSError:
+        # Model load already surfaced the real error, if any.
+        return {"path": _display_path(path), "sha256": None, "bytes": None}
+    key = (path, stat.st_size, stat.st_mtime_ns)
+    if key in _IDENTITY_CACHE:
+        _IDENTITY_CACHE.move_to_end(key)
+        return dict(_IDENTITY_CACHE[key])
+
+    digest = hashlib.sha256()
+    total_bytes = 0
+    try:
         with open(path, "rb") as f:
             for block in iter(lambda: f.read(65536), b""):
                 digest.update(block)
-        identity["sha256"] = digest.hexdigest()
-        identity["bytes"] = os.path.getsize(path)
+                total_bytes += len(block)
     except OSError:
-        pass  # model load already surfaced the real error, if any
+        return {"path": _display_path(path), "sha256": None, "bytes": None}
+    identity = {
+        "path": _display_path(path),
+        "sha256": digest.hexdigest(),
+        "bytes": total_bytes,
+    }
+    _IDENTITY_CACHE[key] = dict(identity)
+    while len(_IDENTITY_CACHE) > _IDENTITY_CACHE_MAX:
+        _IDENTITY_CACHE.popitem(last=False)
     return identity
 
 

@@ -143,7 +143,12 @@ def test_draft_provenance_is_complete_and_consistent(tmp_path):
     provenance = envelope["provenance"]
     assert provenance["voice_os_version"] == __version__
     assert provenance["kb_bundle_hash"] == envelope["kb"]["bundle_hash"]
-    assert provenance["corpus"]["path"] == CORPUS
+    # Repo-relative, never absolute: local paths must not leak into
+    # envelopes that leave the machine.
+    assert provenance["corpus"]["path"] == os.path.join(
+        "data", "sample_corpus.txt"
+    )
+    assert not os.path.isabs(provenance["corpus"]["path"])
     assert provenance["corpus"]["bytes"] == os.path.getsize(CORPUS)
     assert len(provenance["corpus"]["sha256"]) == 64
     assert "context_profiles" in provenance["artifacts"]
@@ -151,6 +156,33 @@ def test_draft_provenance_is_complete_and_consistent(tmp_path):
     # Offline run: no live engine to stamp.
     assert provenance["live_model"] is None
     assert envelope["mode"] == "offline"
+
+
+def test_corpus_identity_memoized_and_machine_neutral(tmp_path):
+    pytest.importorskip("langgraph")
+    from voice_os.product import graph as graph_module
+
+    graph_module._IDENTITY_CACHE.clear()
+    try:
+        first = graph_module._corpus_identity(CORPUS)
+        second = graph_module._corpus_identity(CORPUS)
+        assert first == second
+        # One stat-keyed entry; the second call was served from the memo.
+        assert len(graph_module._IDENTITY_CACHE) == 1
+        assert first["path"] == os.path.join("data", "sample_corpus.txt")
+
+        # Outside the repo: basename only, still hashed.
+        outside = tmp_path / "external_corpus.txt"
+        outside.write_text("--- 2025-01-01 ---\nhello\n", encoding="utf-8")
+        identity = graph_module._corpus_identity(str(outside))
+        assert identity["path"] == "external_corpus.txt"
+        assert len(identity["sha256"]) == 64
+
+        # Content change under the same path invalidates the memo.
+        outside.write_text("--- 2025-01-01 ---\nchanged\n", encoding="utf-8")
+        assert graph_module._corpus_identity(str(outside)) != identity
+    finally:
+        graph_module._IDENTITY_CACHE.clear()
 
 
 # ------------------------------------------------- double-run invariants

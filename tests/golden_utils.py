@@ -4,11 +4,11 @@ Both tests/test_determinism.py (the assertions) and tests/regen_goldens.py
 (the regeneration entry point) import from here, so a golden is always
 compared with exactly the inputs and normalization that produced it.
 
-Normalization strips only fields documented as run-scoped or
-machine-scoped in docs/determinism.md: run ids, KB snapshot ids, the
-absolute corpus path, and the voice_os version string (version
-propagation is asserted separately, so a version bump does not churn
-the goldens). Everything else is locked byte-for-byte.
+Normalization strips only fields documented as run-scoped in
+docs/determinism.md: run ids, KB snapshot ids, and the voice_os
+version string (version propagation is asserted separately, so a
+version bump does not churn the goldens). Everything else, including
+the repo-relative provenance corpus path, is locked byte-for-byte.
 """
 
 from __future__ import annotations
@@ -32,7 +32,6 @@ DRAFT_GOLDEN = os.path.join(GOLDEN_DIR, "draft_offline.json")
 VERSION_PLACEHOLDER = "<voice-os-version>"
 RUN_ID_PLACEHOLDER = "<run-id>"
 SNAPSHOT_PLACEHOLDER = "<snapshot-id>"
-CORPUS_PATH_PLACEHOLDER = "<corpus-path>"
 
 # Fixed inputs for the draft() golden. Deliberately duplicated from the
 # product tests rather than imported, so an edit there cannot silently
@@ -114,8 +113,8 @@ def normalize_draft_envelope(envelope: dict) -> dict:
     provenance = envelope.get("provenance", {})
     if "voice_os_version" in provenance:
         provenance["voice_os_version"] = VERSION_PLACEHOLDER
-    if isinstance(provenance.get("corpus"), dict):
-        provenance["corpus"]["path"] = CORPUS_PATH_PLACEHOLDER
+    # provenance.corpus.path is repo-relative by design (machine-neutral),
+    # so it stays locked in the golden.
     return envelope
 
 

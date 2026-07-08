@@ -44,7 +44,7 @@
     },
     "corpus": {
       "bytes": 3063,
-      "path": "<corpus-path>",
+      "path": "data/sample_corpus.txt",
       "sha256": "b820127da62c8c620da1c54bffec661e4baaaf10f1dc7ec77b94da87151dcf11"
     },
     "kb_bundle_hash": "c6fe09bdf48ee81f828bfd85896e9a0581b4bf0253f91efcb550c7c78c3fd488",

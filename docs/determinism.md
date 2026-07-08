@@ -53,7 +53,11 @@ items scheduled before the evolution/drift module lands.
   bundle hash, and the corpus content identity as path + sha256 +
   byte size. Content hash rather than mtime is the documented
   identity choice: mtime differs across clones and copies of
-  byte-identical content.
+  byte-identical content. The recorded path is machine-neutral
+  (repo-relative for files under the repo, basename otherwise) so
+  envelopes and checkpoints never leak absolute local paths, and the
+  hash is memoized on the file's stat identity so repeated draft()
+  calls do not re-read an unchanged corpus.
 - **Live-run engine stamping.** The moment any persona reports mode
   "live", the resolved model id (`VOICE_OS_MODEL` /
   `llm.DEFAULT_MODEL`) is recorded into `provenance.live_model`;
