@@ -161,6 +161,23 @@ def _stamp_live_model(state: VoiceState, mode: str) -> dict:
     return {"provenance": provenance}
 
 
+# Per-exemplar word budget: chunk text is unbounded (document chunks run
+# to 400 words), so state and prompt payloads are capped here rather than
+# trusting every adapter's chunking policy.
+_EXEMPLAR_MAX_WORDS = 120
+
+
+def _bounded_exemplar(exemplar: dict) -> dict:
+    """A JSON-safe copy with the text capped at _EXEMPLAR_MAX_WORDS."""
+    bounded = dict(exemplar)
+    words = str(bounded.get("text", "")).split()
+    if len(words) > _EXEMPLAR_MAX_WORDS:
+        bounded["text"] = " ".join(words[:_EXEMPLAR_MAX_WORDS])
+        bounded["text_truncated"] = True
+        bounded["text_words_original"] = len(words)
+    return bounded
+
+
 def new_run_id() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"run-{stamp}-{uuid.uuid4().hex[:8]}"
@@ -241,7 +258,7 @@ def prepare(state: VoiceState) -> dict:
         "guidance": list(q.guidance),
         # Top exemplars only: enough voice evidence for the live prompt
         # without dominating it (personal data; see state.py note).
-        "exemplars": [dict(e) for e in q.exemplars[:3]],
+        "exemplars": [_bounded_exemplar(e) for e in q.exemplars[:3]],
         "kb_meta": kb_meta,
         "provenance": provenance,
         "current_draft": state["input_text"],

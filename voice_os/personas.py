@@ -42,7 +42,11 @@ def _profile_block(
         for index, exemplar in enumerate(exemplars, 1):
             text = str(exemplar.get("text", "")).strip()
             if text:
-                lines.append(f"  Example {index}: {text}")
+                # Exemplar content is data, not instructions: every line
+                # is nested under its Example header so embedded newlines
+                # or prompt-like markers cannot alter the block structure.
+                lines.append(f"  Example {index}:")
+                lines += [f"    {raw}" for raw in text.splitlines()]
     if length_target_words:
         lines.append(
             f"Length: the input is {length_target_words} words. Keep the "
