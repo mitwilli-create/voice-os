@@ -371,6 +371,124 @@ def test_draft_validates_before_graph(tmp_path):
         voice_os.draft("hello", max_revisions=-1, **_draft_kwargs(tmp_path))
 
 
+def test_prepare_copies_exemplars_into_state(tmp_path):
+    pytest.importorskip("langgraph")
+    from voice_os.product import graph as graph_module
+
+    chunks_dir = tmp_path / "chunks"
+    chunks_dir.mkdir()
+    lines = []
+    for index in range(5):
+        lines.append(json.dumps({
+            "id": f"chunk-{index}",
+            "text": f"hey, quick synthetic note number {index}!",
+            # Hash prefixes land in held-in buckets (>= 20 mod 100), so
+            # the holdout filter keeps every fixture chunk eligible.
+            "hash": f"{50 + index:08x}" + "0" * 56,
+            "tier": 1,
+            "provenance": {"timestamp": f"2025-06-{10 + index:02d}T12:00:00"},
+            "context": {"audience": "peer", "medium": "email",
+                        "goal": "unknown"},
+        }))
+    (chunks_dir / "store.jsonl").write_text("\n".join(lines) + "\n")
+
+    state = initial_state(
+        input_text="hello there",
+        channel="email",
+        audience="peer",
+        situation="standard",
+        goal="unknown",
+        stakes="routine",
+        medium=None,
+        max_revisions=1,
+        corpus_path=CORPUS,
+        chunks_dir=str(chunks_dir),
+        mined_dir=MINED,
+        banned_path=BANNED,
+        kb_dir=str(tmp_path / "no-kb"),
+        var_dir=str(tmp_path / "var"),
+    )
+    update = graph_module.prepare(state)
+    exemplars = update["exemplars"]
+    assert 1 <= len(exemplars) <= 3
+    for exemplar in exemplars:
+        assert exemplar["text"].strip()
+        assert exemplar["tier"] in (1, 2)
+        assert isinstance(exemplar["fit"], float)
+    json.dumps(exemplars)  # checkpoint-serializable
+
+
+def test_exemplars_and_length_reach_live_prompt():
+    pytest.importorskip("langgraph")
+    from unittest import mock
+
+    from voice_os.axes import AXES
+    from voice_os.personas import GenerativePersona
+
+    captured = {}
+
+    def fake_complete(system, prompt, max_tokens=2000):
+        captured["prompt"] = prompt
+        return "Revised."
+
+    exemplars = [
+        {"id": "aa", "text": "quick note, running late!", "tier": 1,
+         "fit": 0.9},
+        {"id": "bb", "text": "sounds good, see you there", "tier": 2,
+         "fit": 0.8},
+    ]
+    with mock.patch("voice_os.llm.complete", side_effect=fake_complete):
+        result = GenerativePersona().revise(
+            "some draft text here",
+            {axis: 0.5 for axis in AXES},
+            [],
+            [],
+            exemplars=exemplars,
+            length_target_words=4,
+        )
+    assert result.mode == "live"
+    prompt = captured["prompt"]
+    assert "Examples of this author's real messages" in prompt
+    assert "quick note, running late!" in prompt
+    assert "sounds good, see you there" in prompt
+    assert "the input is 4 words" in prompt
+
+
+def test_qa_gate_appends_length_overrun_signal():
+    pytest.importorskip("langgraph")
+    from voice_os.model import VoiceModel
+    from voice_os.product import graph as graph_module
+
+    model = VoiceModel.load(
+        CORPUS, chunks_dir=None, mined_dir=MINED, banned_path=BANNED
+    )
+    q = model.query()
+    state = initial_state(
+        input_text="short input of six words",
+        channel="email",
+        audience="peer",
+        situation="standard",
+        goal="unknown",
+        stakes="routine",
+        medium=None,
+        max_revisions=2,
+    )
+    state.update(
+        target_profile=dict(q.target_profile),
+        baseline_mean=dict(model.baseline.mean),
+        baseline_std=dict(model.baseline.std),
+        banned=[],
+        current_draft=" ".join(["word"] * 30),
+    )
+    update = graph_module.qa_gate(state)
+    assert any("cut it to about" in s for s in update["revision_signals"])
+
+    # Within budget: the length signal stays out of the gate output.
+    state["current_draft"] = "short input of six words"
+    update = graph_module.qa_gate(state)
+    assert not any("cut it to about" in s for s in update["revision_signals"])
+
+
 def test_describe_graph_names_all_nodes():
     pytest.importorskip("langgraph")
     import voice_os
