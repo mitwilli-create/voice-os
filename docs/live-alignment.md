@@ -74,15 +74,34 @@ Expected live observables: `length_ratio` mean toward 1.0-1.3,
 `alignment_judged` up from 0.560, pass rate up from 0.333, em-dash rate
 stays 0.0.
 
+**Measured (live run eval-20260708T053843Z-9143b1ad, 18 cases,
+claude-opus-4-8, all 18 confirmed receiving 3 exemplars via
+checkpoints):** length_ratio 0.9591 (inflation eliminated; was
+1.2x-3.1x on failing cases), em_dash 0.0, banned 0.0. alignment_judged
+0.5589 (flat vs 0.560), judge same_author 1.67 (flat vs 1.72), pass
+rate 0.2222 (down from 0.333; drafts changed shape, the 0.80 gate did
+not). Honest reading: the length root cause is closed, exemplar fusion
+did not move the judge, and the flat judged score with a mean
+same_author of 1.67 strengthens the parked judge-anchoring hypothesis
+(one short real message is a weak authorship anchor). The gate
+overdemand (root cause 2) remains the live blocker on pass rate and is
+addressed by PR 2 below.
+
 ## PR 2: gate calibration (`fix/gate-calibration`)
 
 A threshold above what real text scores in a cell makes the gate reject
 drafts for being no more target-conformant than the author himself.
 
 - Emit per-(channel, audience) real-text fidelity percentiles
-  (p25/p40/p50, n) from the held-out scorecard pass into
-  `corpus/mined/gate_calibration.json`, envelope-wrapped like the other
-  mined artifacts and loaded tolerantly.
+  (p25/p40/p50, n) into `corpus/mined/gate_calibration.json`,
+  envelope-wrapped like the other mined artifacts and loaded tolerantly.
+- Split choice: the miner measures the held-in split, not the held-out
+  scorecard pass the gap analysis quoted. Mining on holdout would break
+  the repo invariant that miners see only the train side (mine/weights
+  docstring) and would let the gate learn from the exact chunks the
+  scorecard measures. Held-in gives roughly 4x the sample per cell; the
+  generation run that produces the artifact quotes both splits'
+  percentiles so the (small) difference is on record.
 - The product graph's `qa_gate` uses a per-cell threshold of
   `clamp(cell p40, 0.65, 0.80)` only when the artifact exists and the
   cell has n >= 50; otherwise the 0.80 default holds everywhere.

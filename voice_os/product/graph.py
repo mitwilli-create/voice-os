@@ -16,6 +16,7 @@ Design: docs/callable-layer.md.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import sqlite3
 import uuid
@@ -166,6 +167,37 @@ def _stamp_live_model(state: VoiceState, mode: str) -> dict:
 # trusting every adapter's chunking policy.
 _EXEMPLAR_MAX_WORDS = 120
 
+# Calibrated per-cell gate thresholds stay inside this band: the floor
+# keeps a sparse or skewed cell from disabling the gate, the ceiling is
+# the hand default (docs/live-alignment.md).
+_GATE_THRESHOLD_FLOOR = 0.65
+_GATE_THRESHOLD_CEILING = 0.80
+_GATE_MIN_CELL_N = 50
+
+
+def _cell_threshold(
+    gate_calibration: dict | None, channel: str, audience: str
+) -> float | None:
+    """The calibrated threshold for a (channel, audience) cell, or None
+    when no trustworthy calibration exists (absent artifact, unknown
+    cell, thin cell, or a malformed percentile)."""
+    if not gate_calibration:
+        return None
+    cell = gate_calibration.get("cells", {}).get(f"{channel}|{audience}")
+    if not cell or cell.get("n", 0) < _GATE_MIN_CELL_N:
+        return None
+    p40 = cell.get("p40")
+    # json parses NaN/Infinity by default and NaN survives min/max, which
+    # would make `fidelity >= threshold` unconditionally false; bools are
+    # ints too and must not become thresholds.
+    if isinstance(p40, bool) or not isinstance(p40, (int, float)):
+        return None
+    if not math.isfinite(p40):
+        return None
+    return round(
+        min(max(float(p40), _GATE_THRESHOLD_FLOOR), _GATE_THRESHOLD_CEILING), 4
+    )
+
 
 def _bounded_exemplar(exemplar: dict) -> dict:
     """A JSON-safe copy with the text capped at _EXEMPLAR_MAX_WORDS."""
@@ -228,10 +260,19 @@ def prepare(state: VoiceState) -> dict:
     if bundle.get("errors"):
         kb_meta["errors"] = bundle["errors"]
 
+    gate_threshold = _cell_threshold(
+        model.mined.gate_calibration, state["channel"], state["audience"]
+    )
+
     notes = [
         f"prepare: context resolved (sources: {q.sources})",
         kb_note,
     ]
+    if gate_threshold is not None:
+        notes.append(
+            f"prepare: calibrated gate threshold {gate_threshold:.4f} "
+            f"for {state['channel']}|{state['audience']}"
+        )
     drift_flags = q.meta.get("drift_flags") or []
     if drift_flags:
         notes.append(f"prepare: drift flags active: {drift_flags}")
@@ -259,6 +300,7 @@ def prepare(state: VoiceState) -> dict:
         # Top exemplars only: enough voice evidence for the live prompt
         # without dominating it (personal data; see state.py note).
         "exemplars": [_bounded_exemplar(e) for e in q.exemplars[:3]],
+        "gate_threshold": gate_threshold,
         "kb_meta": kb_meta,
         "provenance": provenance,
         "current_draft": state["input_text"],
@@ -325,6 +367,9 @@ def qa_gate(state: VoiceState) -> dict:
     tone_observed = (
         derive_metrics(tone_signals(draft_text)) if tone_profile else None
     )
+    gate_kwargs = {}
+    if state.get("gate_threshold") is not None:
+        gate_kwargs["threshold"] = state["gate_threshold"]
     result = gate_extended(
         scores,
         baseline,
@@ -332,6 +377,7 @@ def qa_gate(state: VoiceState) -> dict:
         find_banned(draft_text, state["banned"]),
         tone_observed=tone_observed,
         tone_profile=tone_profile,
+        **gate_kwargs,
     )
 
     if result.decision == "pass":

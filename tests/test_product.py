@@ -492,6 +492,78 @@ def test_exemplars_and_length_reach_live_prompt():
     assert "the input is 4 words" in prompt
 
 
+def test_cell_threshold_resolution():
+    pytest.importorskip("langgraph")
+    from voice_os.product import graph as graph_module
+
+    calibration = {
+        "cells": {
+            "chat|friend-family": {"n": 700, "p25": 0.61, "p40": 0.6543,
+                                   "p50": 0.70},
+            "email|peer": {"n": 120, "p25": 0.80, "p40": 0.86, "p50": 0.90},
+            "email|leadership": {"n": 12, "p25": 0.5, "p40": 0.55,
+                                 "p50": 0.6},
+        }
+    }
+    # p40 below the floor clamps up; above the ceiling clamps down.
+    assert graph_module._cell_threshold(
+        calibration, "chat", "friend-family"
+    ) == 0.6543
+    assert graph_module._cell_threshold(calibration, "email", "peer") == 0.80
+    # Thin cell, unknown cell, absent artifact: hand default (None).
+    assert graph_module._cell_threshold(
+        calibration, "email", "leadership"
+    ) is None
+    assert graph_module._cell_threshold(calibration, "sms", "peer") is None
+    assert graph_module._cell_threshold(None, "chat", "peer") is None
+    # Non-finite and boolean p40 values never become thresholds: NaN
+    # survives min/max and would make the pass comparison always false.
+    for bad_p40 in (float("nan"), float("inf"), float("-inf"), True, "0.7"):
+        poisoned = {"cells": {"email|peer": {"n": 120, "p40": bad_p40}}}
+        assert graph_module._cell_threshold(poisoned, "email", "peer") is None
+
+
+def test_qa_gate_honors_calibrated_threshold():
+    pytest.importorskip("langgraph")
+    from voice_os.axes import AxisProfile, score_text
+    from voice_os.model import VoiceModel
+    from voice_os.product import graph as graph_module
+
+    model = VoiceModel.load(
+        CORPUS, chunks_dir=None, mined_dir=MINED, banned_path=BANNED
+    )
+    q = model.query()
+    draft = "Quick note: the plan holds, timeline is tight but fine."
+    fidelity, _ = AxisProfile(
+        mean=q.target_profile, std=model.baseline.std
+    ).fidelity(score_text(draft))
+
+    state = initial_state(
+        input_text=draft,
+        channel="email",
+        audience="peer",
+        situation="standard",
+        goal="unknown",
+        stakes="routine",
+        medium=None,
+        max_revisions=2,
+    )
+    state.update(
+        target_profile=dict(q.target_profile),
+        baseline_mean=dict(model.baseline.mean),
+        baseline_std=dict(model.baseline.std),
+        banned=[],
+        current_draft=draft,
+    )
+
+    # Threshold just below the draft's measured fidelity: pass.
+    state["gate_threshold"] = round(fidelity - 0.01, 4)
+    assert graph_module.qa_gate(state)["qa_decision"] == "pass"
+    # Just above it: the same draft cycles.
+    state["gate_threshold"] = round(fidelity + 0.01, 4)
+    assert graph_module.qa_gate(state)["qa_decision"] == "revise"
+
+
 def test_qa_gate_appends_length_overrun_signal():
     pytest.importorskip("langgraph")
     from voice_os.model import VoiceModel

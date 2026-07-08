@@ -45,6 +45,9 @@ class VoiceState(TypedDict):
     # prompts only; holdout-filtered upstream so scoring never sees them.
     # Exemplar text is personal data and lands in checkpoints under var/.
     exemplars: list[dict]
+    # per-cell calibrated gate threshold from the gate_calibration mined
+    # artifact; None means the hand default (qa.PASS_THRESHOLD) applies.
+    gate_threshold: float | None
     kb_meta: dict
     # reproducibility metadata (docs/determinism.md hardening items 2-3):
     # voice_os version, mined artifact versions, KB bundle hash, corpus
@@ -108,6 +111,7 @@ def initial_state(
         "banned": [],
         "guidance": [],
         "exemplars": [],
+        "gate_threshold": None,
         "kb_meta": {},
         "provenance": {},
         "current_draft": "",

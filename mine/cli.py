@@ -16,6 +16,7 @@ from ingest.export import iter_chunk_dicts
 
 from .contrast import DEFAULT_GENERATED, DEFAULT_SEED, generate_contrast, load_contrast
 from .drift import mine_drift
+from .gate_calibration import mine_gate_calibration
 from .ngrams import load_never_ban, mine_ngram_diffs
 from .recipients import mine_recipient_deltas
 from .tone_norms import mine_context_profiles
@@ -23,12 +24,13 @@ from .tone_norms import mine_context_profiles
 NEVER_BAN_PATH = os.path.join("data", "never_ban.txt")
 
 # job name -> (miner callable over a chunk iterator, output filename);
-# the ngrams job also needs the contrast corpus and is dispatched specially.
+# the ngrams and gate jobs need extra inputs and are dispatched specially.
 JOBS = {
     "recipients": (mine_recipient_deltas, "recipient_deltas.json"),
     "tone": (mine_context_profiles, "context_profiles.json"),
     "ngrams": (None, "ngram_banned.json"),
     "drift": (mine_drift, "drift_report.json"),
+    "gate": (None, "gate_calibration.json"),
 }
 
 
@@ -60,6 +62,21 @@ def _run(args: argparse.Namespace) -> int:
         miner, filename = JOBS[job]
         if job == "ngrams":
             artifact = _mine_ngrams(args)
+        elif job == "gate":
+            # Needs the corpus baseline for its calibrated targets; a
+            # chunks-only corpus dir skips the job instead of failing the
+            # whole run.
+            corpus_path = os.path.join(args.corpus_dir, "voice_corpus.txt")
+            if not os.path.exists(corpus_path):
+                print(f"gate: skipped (no corpus file at {corpus_path})")
+                continue
+            # Reads the other mined artifacts for its targets, so it runs
+            # meaningfully after them (dict order in JOBS).
+            artifact = mine_gate_calibration(
+                iter_chunk_dicts(args.corpus_dir),
+                corpus_path=corpus_path,
+                mined_dir=args.out,
+            )
         else:
             artifact = miner(iter_chunk_dicts(args.corpus_dir))
         out_path = os.path.join(args.out, filename)

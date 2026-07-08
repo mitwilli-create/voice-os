@@ -20,6 +20,7 @@ ARTIFACT_FILES = {
     "ngram_banned": "ngram_banned.json",
     "drift_report": "drift_report.json",
     "evolution_flags": "evolution_flags.json",
+    "gate_calibration": "gate_calibration.json",
 }
 
 
@@ -32,6 +33,7 @@ class MinedArtifacts:
     ngram_banned: list[str] = field(default_factory=list)
     drift_report: dict | None = None
     evolution_flags: dict | None = None
+    gate_calibration: dict | None = None
     meta: dict = field(default_factory=dict)  # per-artifact generated_at etc.
 
 
@@ -87,6 +89,17 @@ def load_artifacts(mined_dir: str | None) -> MinedArtifacts:
             artifacts.drift_report = raw["data"]
         elif name == "evolution_flags":
             artifacts.evolution_flags = raw["data"]
+        elif name == "gate_calibration":
+            cells = raw["data"].get("cells", {})
+            if not isinstance(cells, dict) or any(
+                not isinstance(v, dict) or not isinstance(v.get("n"), int)
+                for v in cells.values()
+            ):
+                raise ValueError(
+                    f"artifact {name} has a malformed cells map; expected "
+                    "cell objects each carrying an integer 'n'"
+                )
+            artifacts.gate_calibration = raw["data"]
     return artifacts
 
 
