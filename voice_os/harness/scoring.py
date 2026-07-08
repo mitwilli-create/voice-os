@@ -94,7 +94,14 @@ def _semantic_similarity(real: str, generated: str) -> tuple[float, str]:
 
 def embed_similarity(real: str, generated: str) -> dict:
     """Similarity block: lexical always (the gated numbers), semantic
-    only when VOICE_OS_EMBED_BACKEND=voyage is set."""
+    only when VOICE_OS_EMBED_BACKEND=voyage is set AND the run is not
+    forced offline.
+
+    VOICE_OS_OFFLINE is the repo-wide privacy override (voice_os/llm.py):
+    when set, no text leaves the process, so the voyage branch is
+    skipped entirely. Offline harness runs set it for their duration,
+    which keeps the gate deterministic even in shells that export the
+    embed backend."""
     block = {
         "content": round(
             cosine(_content_counts(real), _content_counts(generated)), 4
@@ -104,7 +111,9 @@ def embed_similarity(real: str, generated: str) -> dict:
         ),
         "backend": "lexical",
     }
-    if os.environ.get(EMBED_BACKEND_ENV) == "voyage":
+    if os.environ.get(EMBED_BACKEND_ENV) == "voyage" and not os.environ.get(
+        "VOICE_OS_OFFLINE"
+    ):
         semantic, backend = _semantic_similarity(real, generated)
         block["semantic"] = round(semantic, 4)
         block["backend"] = f"lexical+{backend}"

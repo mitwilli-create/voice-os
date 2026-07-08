@@ -50,7 +50,33 @@ def load_summary(path: str) -> dict:
     return summary
 
 
+def degenerate_reason(summary: dict) -> str | None:
+    """Why a summary cannot anchor or pass the gate; None when usable.
+
+    A starved eval (empty store, over-strict filters, broken selection)
+    produces zero cases and None aggregates. Skipping those checks
+    would let the gate silently stop enforcing, so degenerate summaries
+    are rejected outright instead of skipped.
+    """
+    overall = summary.get("overall")
+    if not isinstance(overall, dict):
+        return "summary has no overall block"
+    if not overall.get("n"):
+        return "summary has zero cases"
+    if overall.get("alignment_offline") is None:
+        return "summary is missing overall alignment_offline"
+    return None
+
+
 def write_baseline(summary: dict, path: str) -> None:
+    """Persist an accepted summary as the gate anchor.
+
+    Refuses degenerate summaries unconditionally (no --force override):
+    an empty baseline would disable the gate for every later run.
+    """
+    reason = degenerate_reason(summary)
+    if reason:
+        raise ValueError(f"refusing to store baseline: {reason}")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, sort_keys=True)
@@ -91,7 +117,26 @@ def _check(
 def gate(
     current: dict, baseline: dict, tolerances: dict | None = None
 ) -> dict:
-    """Compare two summaries. Empty regressions list = pass."""
+    """Compare two summaries. Empty regressions list = pass.
+
+    A degenerate summary on either side (zero cases, missing gated
+    metrics) is status "invalid", never "pass": a starved eval must
+    block, not slide through as all-skipped.
+    """
+    for name, summary in (("current", current), ("baseline", baseline)):
+        reason = degenerate_reason(summary)
+        if reason:
+            record = {
+                "metric": f"{name}-summary",
+                "status": "invalid",
+                "reason": reason,
+            }
+            return {
+                "status": "invalid",
+                "regressions": [record],
+                "checks": [record],
+            }
+
     tol = dict(DEFAULT_TOLERANCES)
     if tolerances:
         tol.update(tolerances)

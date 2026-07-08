@@ -79,13 +79,17 @@ def render_gate(result: dict) -> str:
     lines = [f"eval gate: {result['status'].upper()}"]
     for record in result["checks"]:
         status = record["status"]
-        if status.startswith("skipped"):
-            lines.append(f"  {record['metric']:44} {status}")
-        else:
+        if status in ("ok", "regression"):
             lines.append(
                 f"  {record['metric']:44} {record['baseline']} -> "
                 f"{record['current']} (delta {record['delta']:+}, "
                 f"tol {record['tolerance']}) {status}"
+            )
+        else:
+            detail = record.get("reason", "")
+            lines.append(
+                f"  {record['metric']:44} {status}"
+                + (f" ({detail})" if detail else "")
             )
     return "\n".join(lines)
 
@@ -153,7 +157,11 @@ def main(argv: list[str] | None = None) -> int:
         path = args.baseline or baseline_path(args.var_dir)
         if not os.path.exists(path):
             if args.update_baseline:
-                write_baseline(current, path)
+                try:
+                    write_baseline(current, path)
+                except ValueError as exc:
+                    print(f"eval gate: {exc}", file=sys.stderr)
+                    return 2
                 print(f"eval gate: baseline established at {path}")
                 return 0
             print(
@@ -176,15 +184,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.update_baseline:
             if result["status"] == "pass" or args.force:
-                write_baseline(current, path)
+                try:
+                    write_baseline(current, path)
+                except ValueError as exc:
+                    # Degenerate summaries never anchor the gate, even
+                    # under --force.
+                    print(f"eval gate: {exc}", file=sys.stderr)
+                    return 2
                 print(f"eval gate: baseline updated at {path}")
-            else:
-                print(
-                    "eval gate: refusing to move the baseline over a "
-                    "regression (pass --force to override)",
-                    file=sys.stderr,
-                )
-                return 1
+                # A forced move is an explicit acceptance of the new
+                # numbers; the command succeeded.
+                return 0
+            print(
+                "eval gate: refusing to move the baseline over a "
+                "regression (pass --force to override)",
+                file=sys.stderr,
+            )
+            return 1
         return 0 if result["status"] == "pass" else 1
 
     if args.command == "runs":

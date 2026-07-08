@@ -275,6 +275,68 @@ def test_gate_rates_fail_on_increase_only():
     assert gate_module.gate(better, baseline)["status"] == "pass"
 
 
+def test_gate_rejects_degenerate_summaries():
+    """A starved eval (zero cases, None aggregates) must block, not
+    slide through as all-skipped; and it can never anchor the gate."""
+    baseline = _summary_fixture()
+    empty = {
+        "overall": {
+            "n": 0,
+            "alignment_offline": None,
+            "style_overall": None,
+            "banned_hit_rate": None,
+            "em_dash_rate": None,
+        },
+        "by_channel": {},
+        "by_audience": {},
+    }
+    result = gate_module.gate(empty, baseline)
+    assert result["status"] == "invalid"
+    assert result["regressions"]
+    assert gate_module.gate(baseline, empty)["status"] == "invalid"
+    with pytest.raises(ValueError, match="refusing to store baseline"):
+        gate_module.write_baseline(empty, "/tmp/never-written.json")
+    assert gate_module.degenerate_reason(baseline) is None
+
+
+def test_gate_cli_refuses_degenerate_baseline(tmp_path):
+    empty = {
+        "overall": {"n": 0, "alignment_offline": None},
+        "by_channel": {},
+        "by_audience": {},
+    }
+    path = tmp_path / "empty.summary.json"
+    path.write_text(json.dumps(empty), encoding="utf-8")
+    from voice_os.harness.__main__ import main
+
+    baseline = str(tmp_path / "baseline.json")
+    assert (
+        main(
+            [
+                "gate",
+                "--summary",
+                str(path),
+                "--baseline",
+                baseline,
+                "--update-baseline",
+                "--force",
+            ]
+        )
+        == 2
+    )
+    assert not os.path.exists(baseline)
+
+
+def test_embed_similarity_honors_offline_override(monkeypatch):
+    """VOICE_OS_OFFLINE is the privacy override: no text may leave the
+    process, so the voyage branch must be skipped entirely."""
+    monkeypatch.setenv(scoring.EMBED_BACKEND_ENV, "voyage")
+    monkeypatch.setenv("VOICE_OS_OFFLINE", "1")
+    block = scoring.embed_similarity("real text here", "generated text here")
+    assert block["backend"] == "lexical"
+    assert "semantic" not in block
+
+
 def test_gate_skips_small_n_cells_and_missing_metrics():
     baseline = _summary_fixture()
     current = copy.deepcopy(baseline)
@@ -394,6 +456,40 @@ def test_gate_cli_lifecycle(tmp_path):
     degraded_path = str(tmp_path / "degraded.summary.json")
     Path(degraded_path).write_text(json.dumps(degraded), encoding="utf-8")
     assert main(["gate", "--summary", degraded_path, "--baseline", baseline]) == 1
+
+    # A regressed summary cannot move the baseline without --force;
+    # a forced move is explicit acceptance and succeeds.
+    assert (
+        main(
+            [
+                "gate",
+                "--summary",
+                degraded_path,
+                "--baseline",
+                baseline,
+                "--update-baseline",
+            ]
+        )
+        == 1
+    )
+    assert (
+        main(
+            [
+                "gate",
+                "--summary",
+                degraded_path,
+                "--baseline",
+                baseline,
+                "--update-baseline",
+                "--force",
+            ]
+        )
+        == 0
+    )
+    updated = json.loads(Path(baseline).read_text(encoding="utf-8"))
+    assert updated["overall"]["alignment_offline"] == pytest.approx(
+        degraded["overall"]["alignment_offline"]
+    )
 
 
 def test_repo_tree_stays_clean_after_harness_run(tmp_path):
