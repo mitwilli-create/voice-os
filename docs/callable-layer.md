@@ -340,6 +340,14 @@ later.
 - Environment note carried from the core: `VOICE_OS_OFFLINE` is a
   truthy check, so tests set `VOICE_OS_OFFLINE=1` and never `=0`.
 
+## Determinism
+
+The callable layer inherits the project-wide determinism contract:
+offline runs are byte-reproducible given the same inputs, live runs
+are reproducible-in-inputs via provenance stamping. Guarantees, audit
+procedure, scheduled hardening, and the rules every new module must
+follow are in docs/determinism.md.
+
 ## Out of scope (parked)
 
 - KB pattern data fused into persona prompts (needs persona API change).
