@@ -18,17 +18,24 @@ items scheduled before the evolution/drift module lands.
   context, corpus, mined artifacts, and KB content. Only `run_id`,
   snapshot ids, and checkpoint timestamps vary; every scoring,
   decision, and text field is reproducible.
-- **Content-addressed KB versioning.** KB snapshots are identified by
-  a sha256 bundle hash; identical content never re-snapshots, changed
-  content always does (`voice_os/product/kb.py`).
+- **Content-deduplicated KB versioning.** KB snapshots are
+  de-duplicated by a sha256 bundle hash stored in each manifest:
+  identical content never re-snapshots, changed content always does
+  (`voice_os/product/kb.py`). The `snapshot_id` itself is a
+  timestamped directory name and is run-scoped; the `bundle_hash` is
+  the stable content identity to compare across runs.
 - **Checkpointed calibration.** The full calibration inputs (baseline
   mean/std, target profile, banned list, tone norms) are serialized
   into every run's state, so a checkpoint is self-describing without
   re-reading the corpus.
 - **Stable iteration.** File globs are sorted, hash concatenation is
   name-sorted, exemplar selection is a bounded deterministic heap.
-- **Golden regression.** `run_pipeline`'s default output is locked by
-  golden tests; the test suite runs offline with synthetic fixtures.
+- **Regression coverage today.** `run_pipeline`'s default-output
+  behavior is pinned by offline tests asserting selected fields
+  (decision, fidelity bounds, and exact `output_text` in specific
+  cases), with synthetic fixtures. This is invariant coverage, not yet
+  a full golden snapshot of the output envelope; the full golden locks
+  are hardening item 1 below.
 
 ## What live mode guarantees instead
 
@@ -51,9 +58,11 @@ regression.
 
 ## Scheduled hardening (Phase 0 of the evolution-module sequence)
 
-1. **Golden-regression lock on the offline `draft()` envelope.**
-   `run_pipeline` has one; the graph path does not yet. Lock the full
-   envelope minus run-scoped fields on the synthetic fixture corpus.
+1. **Full golden-regression locks.** Add true golden snapshots of the
+   complete output envelopes, minus run-scoped fields, on the
+   synthetic fixture corpus: one for `run_pipeline`'s default output
+   (upgrading today's selected-field invariants) and one for the
+   offline `draft()` envelope (currently unlocked).
 2. **Provenance in the envelope and checkpoints.** `QueryResult.meta`
    carries the voice_os version and mined-artifact versions, but the
    prepare node does not copy it into state. Add a serializable
