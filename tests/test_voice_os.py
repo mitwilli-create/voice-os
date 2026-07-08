@@ -19,7 +19,7 @@ from voice_os import load_corpus, run_pipeline, score_draft  # noqa: E402
 from voice_os.axes import AXES, score_text  # noqa: E402
 from voice_os.calibration import calibrate  # noqa: E402
 from voice_os.corpus import parse_corpus, tier_for_year  # noqa: E402
-from voice_os.qa import find_banned, load_banned_list  # noqa: E402
+from voice_os.qa import find_banned, load_banned_list, scrub_em_dashes  # noqa: E402
 
 CORPUS = str(REPO_ROOT / "data" / "sample_corpus.txt")
 BANNED = str(REPO_ROOT / "data" / "banned_list.txt")
@@ -87,6 +87,56 @@ class TestQA(unittest.TestCase):
         self.assertIn("i hope this email finds you well", hits)
         self.assertIn("synergy", hits)
         self.assertGreaterEqual(len(hits), 10)
+
+
+class TestEmDashScrub(unittest.TestCase):
+    """Em dashes are banned outward (house style); personas scrub them
+    at the source so no draft surface can emit one."""
+
+    def test_scrub_forms(self):
+        self.assertEqual(
+            scrub_em_dashes("boldness — a note"), "boldness - a note"
+        )
+        self.assertEqual(scrub_em_dashes("word—word"), "word - word")
+        self.assertEqual(scrub_em_dashes("a——b"), "a - b")
+        # Dash opening a line stays flush; dangling dash is dropped.
+        self.assertEqual(scrub_em_dashes("—item one\n"), "- item one\n")
+        self.assertEqual(scrub_em_dashes("trailing—\nnext"), "trailing\nnext")
+        # Newlines around a dash are preserved as line structure.
+        self.assertNotIn("—", scrub_em_dashes("a—\n—b"))
+
+    def test_scrub_untouched_text_is_identity(self):
+        clean = "No dashes here - just a hyphen, a colon: and prose.\n"
+        self.assertIs(scrub_em_dashes(clean), clean)
+
+    def test_live_persona_output_is_scrubbed(self):
+        from unittest import mock
+
+        from voice_os.personas import GenerativePersona
+
+        with mock.patch(
+            "voice_os.llm.complete",
+            return_value="Bold move — and the right one—clearly.",
+        ):
+            result = GenerativePersona().revise(
+                "draft", {axis: 0.5 for axis in AXES}, [], []
+            )
+        self.assertEqual(result.mode, "live")
+        self.assertNotIn("—", result.text)
+        self.assertEqual(
+            result.text, "Bold move - and the right one - clearly."
+        )
+
+    def test_offline_persona_output_is_scrubbed(self):
+        from voice_os.personas import GenerativePersona
+
+        result = GenerativePersona()._offline_revise(
+            "The plan — such as it is — holds.",
+            {axis: 0.5 for axis in AXES},
+            [],
+        )
+        self.assertEqual(result.mode, "offline")
+        self.assertNotIn("—", result.text)
 
 
 class TestPipeline(unittest.TestCase):
