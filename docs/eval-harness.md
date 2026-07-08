@@ -81,10 +81,12 @@ Three honesty constraints shape the whole design:
 - **LLM access**: the judge goes through `voice_os/llm.py::complete`
   with the existing offline fallback semantics; `VOICE_OS_OFFLINE=1`
   forces the deterministic path end to end.
-- **Graph pattern**: mirrors `voice_os/evolution/graph.py`: the only
-  langgraph import in the package, serializable state, SqliteSaver in
-  its OWN database file (`var/harness.sqlite`) and thread namespace
-  (`eval-...` run ids), run-history projection from trace notes.
+- **Graph pattern**: mirrors `voice_os/evolution/graph.py`: like the
+  product and evolution layers, the harness confines its langgraph
+  import to its own graph.py (the only module in the HARNESS package
+  that imports it), with serializable state, SqliteSaver in its OWN
+  database file (`<var>/harness.sqlite`) and thread namespace
+  (`eval-...` run ids), and run-history projection from trace notes.
 - **Determinism contract inherited from first commit**
   (docs/determinism.md): RNG-free, sorted iteration, run-scoped fields
   documented, offline surfaces covered by the double-run invariant in
@@ -205,11 +207,14 @@ similarities, tone MAE, pass rate, banned hit rate, em-dash rate.
 Cells inherit the case stratification, so per-channel and per-audience
 fidelity is a first-class output, not a pivot someone runs by hand.
 
-Persistence under the gitignored var root:
+Persistence under the gitignored var root. `<var>` resolves by the
+repo-standard convention (explicit `var_dir` argument, else the
+`VOICE_OS_VAR_DIR` environment variable, else the repo-root `var/`),
+exactly as in the product and evolution layers:
 
-    var/eval/reports/<run_id>.json          # full: real + generated text (PERSONAL)
-    var/eval/reports/<run_id>.summary.json  # numbers only, no message text
-    var/eval/baseline.json                  # the accepted summary the gate compares to
+    <var>/eval/reports/<run_id>.json          # full: real + generated text (PERSONAL)
+    <var>/eval/reports/<run_id>.summary.json  # numbers only, no message text
+    <var>/eval/baseline.json                  # the accepted summary the gate compares to
 
 Full reports contain personal text and never leave var/. Summaries
 contain only metric numbers, counts, and context labels; they are what
@@ -234,11 +239,12 @@ the gate consumes and what can be quoted in PR bodies.
 State (`EvalState`): config paths + mode flags, `cases`, `cursor`,
 `results` (operator.add), `summary`, `report_path`, `summary_path`,
 `trace_notes` (operator.add). All values JSON-serializable.
-Checkpoints: SqliteSaver on `var/harness.sqlite`, thread ids
-`eval-<utcstamp>-<hex8>`; recursion limit sized to
+Checkpoints: SqliteSaver on `<var>/harness.sqlite` (var root resolved
+via `var_dir` / `VOICE_OS_VAR_DIR` / repo default, as above), thread
+ids `eval-<utcstamp>-<hex8>`; recursion limit sized to
 `2 * len(cases) + 12`. Inner `draft()` calls receive
 `var_dir=<var>/eval` so pipeline checkpoints and KB snapshots from
-eval runs live under `var/eval/`, fully separated from product runs.
+eval runs live under `<var>/eval/`, fully separated from product runs.
 
 Run-scoped fields excluded from determinism comparisons: run id,
 generated_at timestamps, absolute paths, inner run ids. Everything
@@ -276,17 +282,23 @@ Enforcement layers, from automatic to manual:
    skip). The repo-wide gitignore blocks `*.json` except under
    `tests/fixtures/`, which is exactly where the committed golden
    lives. This runs inside the standard suite every PR already runs.
-2. **pre-push hook (automatic on push)**: `.githooks/pre-push` (the
-   repo already sets `core.hooksPath`) runs the fixture harness test,
-   then, when `var/eval/baseline.json` exists, the real-corpus offline
-   gate: `python3 -m voice_os.harness gate`. Nonzero exit blocks the
-   push. Escape hatch for emergencies: `VOICE_OS_SKIP_EVAL_GATE=1`,
-   which prints loudly that the gate was skipped. Target runtime
-   under ~3 minutes; if the real-corpus run exceeds that in practice,
-   the default case cap shrinks before the hook gets softened.
+2. **pre-push hook (automatic once hooks are enabled)**:
+   `.githooks/pre-push` runs the fixture harness test, then, when
+   `<var>/eval/baseline.json` exists, the real-corpus offline gate:
+   `python3 -m voice_os.harness gate`. Nonzero exit blocks the push.
+   Like the existing privacy pre-commit hook, this requires the
+   per-clone opt-in `git config core.hooksPath .githooks` (already
+   set in the primary working clone; fresh clones must run it, per
+   docs/ingestion.md). It is a safeguard for enabled clones, not a
+   guarantee for every contributor; layer 1 in pytest is the layer
+   that runs everywhere. Escape hatch for emergencies:
+   `VOICE_OS_SKIP_EVAL_GATE=1`, which prints loudly that the gate was
+   skipped. Target runtime under ~3 minutes; if the real-corpus run
+   exceeds that in practice, the default case cap shrinks before the
+   hook gets softened.
 3. **explicit baseline moves only**: `python3 -m voice_os.harness gate
    --update-baseline` copies the current summary over
-   `var/eval/baseline.json` after a passing comparison or an explicit
+   `<var>/eval/baseline.json` after a passing comparison or an explicit
    `--force`. Nothing ever moves the baseline implicitly, mirroring
    the evolution module's stored-baseline semantics.
 
