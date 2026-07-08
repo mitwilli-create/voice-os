@@ -115,6 +115,29 @@ Expected live observables: pass rate approaches the share of drafts the
 judge rates 3+, gate-vs-judge disagreement shrinks, judged does not
 regress.
 
+**Measured (live run eval-20260708T060442Z-8b0af212, same 18 cases):**
+pass rate 0.2222 to 0.6667, alignment_judged 0.5589 to 0.6338, judge
+same_author 1.67 to 2.22, length_ratio 0.9523 holds, em_dash 0.0.
+Judged improved alongside the gate change: calibrated thresholds mean
+fewer forced revision cycles, so drafts keep more of their natural
+voice instead of being over-revised toward the modeled target.
+
+## Measurement 3: KB fusion (feat/kb-fusion, PR #21)
+
+The compact KB's distilled voice patterns joined the live prompts
+(docs/kb-fusion.md). **Measured (live run
+eval-20260708T062409Z-290f9e36, same 18 cases):** alignment_judged
+0.6338 to 0.6664, pass rate 0.6667 to 0.7222, chat judged 0.7725,
+em_dash and banned 0.0.
+
+Campaign trajectory across the three measured changes (18 held-out
+cases, claude-opus-4-8 personas and judge): alignment_judged 0.560 to
+0.5589 to 0.6338 to 0.6664; pass rate 0.278 to 0.2222 to 0.6667 to
+0.7222; length_ratio from 1.2x-3.1x inflation on failures to ~0.95
+throughout. The remaining judged headroom most plausibly sits in the
+parked judge-anchoring weakness and in corpus breadth (the peer cell
+scores lowest and had the thinnest evidence at measurement time).
+
 ## Out of scope
 
 - Judge exemplar-anchoring (parked, above).
