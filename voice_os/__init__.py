@@ -112,7 +112,12 @@ def run_cycles(
         cycles.append(record)
         text = revision.text
 
-    return cycles, result, text, modes
+    # Return-boundary scrub: with the entry scrub and persona-output
+    # scrubs this is a no-op today (scrub_em_dashes is idempotent), but
+    # it makes "returned text never contains an em dash" a local
+    # invariant of this function rather than a property every mutation
+    # path must individually preserve.
+    return cycles, result, scrub_em_dashes(text), modes
 
 
 def run_pipeline(
