@@ -248,6 +248,74 @@ def contrast_of(n: int, text: str = SLOP) -> list[str]:
     return [text for _ in range(n)]
 
 
+def test_cli_gate_job_writes_artifact_when_corpus_present(tmp_path):
+    corpus_dir = tmp_path / "corpus"
+    chunks_dir = corpus_dir / "chunks"
+    chunks_dir.mkdir(parents=True)
+    with open(chunks_dir / "synthetic.jsonl", "w") as f:
+        for chunk in corpus_of(60, hint="cli friend"):
+            f.write(json.dumps(chunk) + "\n")
+    sample = (REPO_ROOT / "data" / "sample_corpus.txt").read_text()
+    (corpus_dir / "voice_corpus.txt").write_text(sample)
+
+    out = corpus_dir / "mined"
+    assert mine_main([
+        "run", "--job", "gate", "--corpus-dir", str(corpus_dir),
+        "--out", str(out),
+    ]) == 0
+    assert (out / "gate_calibration.json").exists()
+    loaded = load_artifacts(str(out))
+    assert loaded.gate_calibration["cells"]["chat|friend-family"]["n"] == 60
+
+
+def test_gate_calibration_percentiles_train_split_only(tmp_path):
+    from mine.gate_calibration import mine_gate_calibration
+
+    corpus = str(REPO_ROOT / "data" / "sample_corpus.txt")
+    chunks = corpus_of(60) + corpus_of(10, train=False)
+    # A second, thin cell stays below min_chunks and must not emit.
+    chunks += corpus_of(5, audience="peer", medium="email")
+    artifact = mine_gate_calibration(
+        iter(chunks), corpus_path=corpus, mined_dir=None
+    )
+    validate_artifact(artifact, "gate_calibration")
+    cells = artifact["data"]["cells"]
+    assert list(cells) == ["chat|friend-family"]
+    cell = cells["chat|friend-family"]
+    assert cell["n"] == 60  # holdout chunks never counted
+    assert 0.0 <= cell["p25"] <= cell["p40"] <= cell["p50"] <= 1.0
+    assert artifact["params"]["min_chunks"] == 50
+
+
+def test_gate_calibration_round_trips_through_loader(tmp_path):
+    from mine.gate_calibration import mine_gate_calibration
+
+    corpus = str(REPO_ROOT / "data" / "sample_corpus.txt")
+    artifact = mine_gate_calibration(
+        iter(corpus_of(60)), corpus_path=corpus, mined_dir=None
+    )
+    (tmp_path / "gate_calibration.json").write_text(json.dumps(artifact))
+    loaded = load_artifacts(str(tmp_path))
+    assert loaded.gate_calibration is not None
+    assert loaded.gate_calibration["cells"]["chat|friend-family"]["n"] == 60
+    assert loaded.meta["gate_calibration"]["miner"] == "mine.gate_calibration@1.0"
+
+
+def test_gate_calibration_loader_rejects_malformed_cells(tmp_path):
+    bad = {
+        "artifact": "gate_calibration", "version": "1.0",
+        "generated_at": "2026-07-07", "miner": "t",
+        "data": {"cells": {"chat|friend-family": {"n": "sixty"}}},
+    }
+    (tmp_path / "gate_calibration.json").write_text(json.dumps(bad))
+    try:
+        load_artifacts(str(tmp_path))
+    except ValueError as err:
+        assert "cells" in str(err)
+    else:
+        raise AssertionError("malformed cells map must fail fast")
+
+
 def test_tokenize_keeps_internal_apostrophes():
     assert tokenize("Let's ship it, don't wait!") == [
         "let's", "ship", "it", "don't", "wait",
