@@ -120,6 +120,12 @@ slice_by=None)`:
   and is run-scoped; `content_hash` is the stable identity.
 - Personal data (greeting/marker distributions derived from private
   text) stays under the gitignored `var/`.
+- All evolution persistence (baseline store AND the drift checkpoint
+  database) resolves through the same var-dir convention as the
+  callable layer: explicit `var_dir` argument, then the
+  `VOICE_OS_VAR_DIR` environment override, then the repo-root-anchored
+  default, so scheduled runs and non-repo-root invocations control
+  where personal-data artifacts land.
 
 **Drift check** (`patterns.py::diff_profiles(baseline, current)`), pure:
 
@@ -155,9 +161,11 @@ deterministic (no LLM):
   fading pattern lists and the run id that produced them.
 - `voice_os/mined.py` gains the artifact in `ARTIFACT_FILES`;
   `VoiceModel.query` surfaces the flags in `QueryResult.meta`
-  ("evolution_flags"), exactly parallel to `drift_flags`, and the
-  product layer's prepare node already forwards meta flags into trace
-  notes.
+  ("evolution_flags"), exactly parallel to `drift_flags`. The product
+  layer's prepare node today forwards only `drift_flags` into trace
+  notes; the implementation PR extends prepare() with the same
+  forwarding for `evolution_flags` (a two-line addition mirroring the
+  drift_flags block).
 - NOTHING auto-applies: fading phrases are candidates for the hand
   banned list (`data/banned_list.txt`), emerging phrases are
   candidates for `data/never_ban.txt` protection; both remain explicit
@@ -182,8 +190,9 @@ Small LangGraph StateGraph in `graph.py`, mirroring
 - `DriftState` TypedDict: serializable primitives only; append-only
   `trace_notes` reducer; paths (chunks_dir, var_dir, mined_dir) in
   state so checkpoints are self-describing.
-- Persistence: SqliteSaver over `var/evolution.sqlite` (own file, own
-  thread namespace `drift-<timestamp>-<hex>` run ids).
+- Persistence: SqliteSaver over `<var_dir>/evolution.sqlite` (own
+  file, own thread namespace `drift-<timestamp>-<hex>` run ids), with
+  var_dir resolved through the convention above.
 - `voice_os.drift_run(...)` executes one checkpointed run;
   `voice_os.drift_run_history(run_id=None)` lists prior runs (all
   thread ids when run_id is None) for review and comparison.
