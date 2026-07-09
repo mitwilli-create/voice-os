@@ -94,11 +94,20 @@ class TestEmDashScrub(unittest.TestCase):
     at the source so no draft surface can emit one."""
 
     def test_scrub_forms(self):
+        # The scrub rewrites (comma/marker/drop), never glyph-swaps to a
+        # spaced hyphen (2026-07-08 field report, class 4b).
         self.assertEqual(
-            scrub_em_dashes("boldness — a note"), "boldness - a note"
+            scrub_em_dashes("boldness — a note"), "boldness, a note"
         )
-        self.assertEqual(scrub_em_dashes("word—word"), "word - word")
-        self.assertEqual(scrub_em_dashes("a——b"), "a - b")
+        self.assertEqual(scrub_em_dashes("word—word"), "word, word")
+        self.assertEqual(scrub_em_dashes("a——b"), "a, b")
+        # Paired parenthetical dashes become a comma pair.
+        self.assertEqual(
+            scrub_em_dashes("the fix — one line — shipped"),
+            "the fix, one line, shipped",
+        )
+        # A run between digits is a range: unspaced hyphen.
+        self.assertEqual(scrub_em_dashes("pages 3—5"), "pages 3-5")
         # Dash opening a line stays flush; dangling dash is dropped.
         self.assertEqual(scrub_em_dashes("—item one\n"), "- item one\n")
         self.assertEqual(scrub_em_dashes("trailing—\nnext"), "trailing\nnext")
@@ -108,6 +117,22 @@ class TestEmDashScrub(unittest.TestCase):
         # space before the mark.
         self.assertEqual(scrub_em_dashes("word—."), "word.")
         self.assertEqual(scrub_em_dashes("wait—, no"), "wait, no")
+        # After pause punctuation the comma would stack; space instead.
+        self.assertEqual(scrub_em_dashes("note: — right"), "note: right")
+
+    def test_scrub_never_emits_a_spaced_hyphen(self):
+        # " - " is still a dash-shaped tell; the convention is comma,
+        # colon, period, parens, or restructure.
+        cases = [
+            "boldness — a note",
+            "word—word",
+            "a — b — c",
+            "mid — sentence — pair and — single",
+            "quote — 'inner' — end.",
+        ]
+        for case in cases:
+            self.assertNotIn(" - ", scrub_em_dashes(case), case)
+            self.assertNotIn("—", scrub_em_dashes(case), case)
 
     def test_pass_through_draft_is_scrubbed_at_the_boundary(self):
         # An already-in-voice draft can pass the gate at cycle 0 with no
@@ -141,7 +166,7 @@ class TestEmDashScrub(unittest.TestCase):
         self.assertEqual(result.mode, "live")
         self.assertNotIn("—", result.text)
         self.assertEqual(
-            result.text, "Bold move - and the right one - clearly."
+            result.text, "Bold move, and the right one, clearly."
         )
 
     def test_offline_persona_output_is_scrubbed(self):

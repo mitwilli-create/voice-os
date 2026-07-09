@@ -53,24 +53,33 @@ def find_banned(text: str, banned: list[str]) -> list[str]:
 # fixes deterministically, so they are scrubbed at the source instead:
 # every persona output passes through scrub_em_dashes before it enters
 # the pipeline (voice_os/personas.py).
-_EM_DASH_RUN = re.compile(r"[ \t]*—+[ \t]*")
-
-
 def scrub_em_dashes(text: str) -> str:
-    """Deterministically replace em dashes with the spaced-hyphen form.
+    """Deterministically rewrite em dashes out of the text.
 
-    Each run of em dashes (with any surrounding spaces or tabs) becomes
-    " - "; newlines are never touched. A dash that opened a line keeps
-    the line flush; a dash left dangling at a line end is dropped.
+    The scrub convention (2026-07-08 field report, class 4b) is
+    restructure, never glyph-swap: a spaced hyphen " - " is still a
+    dash-shaped tell and must never be emitted. Rules, in order:
+
+    - a run between digits is a range and becomes an unspaced hyphen;
+    - a run opening a line is a list/dialogue marker and becomes "- ";
+    - a run running straight into closing punctuation was decorative
+      and is dropped ("word—." -> "word.");
+    - a run dangling at a line end is dropped;
+    - every other run is a spoken-register pause and becomes a comma
+      (paired parenthetical dashes therefore become a comma pair).
+
+    Newlines are never touched.
     """
     if "—" not in text:
         return text
-    scrubbed = _EM_DASH_RUN.sub(" - ", text)
-    scrubbed = re.sub(r"(?m)^ - ", "- ", scrubbed)
-    scrubbed = re.sub(r"(?m) - $", "", scrubbed)
-    # A dash that ran straight into punctuation was decorative; drop it
-    # rather than leave a space before the mark ("word—." -> "word.").
-    scrubbed = re.sub(r" - ([,.;:!?)])", r"\1", scrubbed)
+    scrubbed = re.sub(r"(?<=\d)—+(?=\d)", "-", text)
+    scrubbed = re.sub(r"(?m)^[ \t]*—+[ \t]*", "- ", scrubbed)
+    scrubbed = re.sub(r"[ \t]*—+[ \t]*(?=[,.;:!?)])", "", scrubbed)
+    scrubbed = re.sub(r"(?m)[ \t]*—+[ \t]*$", "", scrubbed)
+    # After an opener or existing pause punctuation a comma would stack
+    # ("(, word", ":, word"); the mark already carries the pause.
+    scrubbed = re.sub(r"(?<=[,;:(\[])[ \t]*—+[ \t]*", " ", scrubbed)
+    scrubbed = re.sub(r"[ \t]*—+[ \t]*", ", ", scrubbed)
     return scrubbed
 
 
