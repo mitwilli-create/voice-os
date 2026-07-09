@@ -1,5 +1,14 @@
 {
   "banned_hits": [],
+  "conservation": {
+    "diction_flags": [],
+    "dropped_modifiers": [],
+    "format_flags": [],
+    "input_retained": false,
+    "quote_violations": [],
+    "redraft": false,
+    "unsupported_sentences": []
+  },
   "context": {
     "audience": "leadership",
     "channel": "email",
@@ -63,11 +72,14 @@
     "generate: mode=offline, notes=2",
     "critique: 2 findings (mode=offline)",
     "qa_gate: gate=cycle -> revise (fidelity 0.638, revision 0)",
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False",
     "revise: revision 1 (mode=offline, 8 signals)",
     "critique: 0 findings (mode=offline)",
     "qa_gate: gate=cycle -> revise (fidelity 0.677, revision 1)",
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False",
     "revise: revision 2 (mode=offline, 7 signals)",
     "critique: 0 findings (mode=offline)",
-    "qa_gate: gate=cycle -> reject (fidelity 0.677, revision 2)"
+    "qa_gate: gate=cycle -> reject (fidelity 0.677, revision 2)",
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False"
   ]
 }

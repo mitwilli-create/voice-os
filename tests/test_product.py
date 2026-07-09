@@ -879,7 +879,14 @@ def test_qa_gate_honors_calibrated_threshold():
         CORPUS, chunks_dir=None, mined_dir=MINED, banned_path=BANNED
     )
     q = model.query()
-    draft = "Quick note: the plan holds, timeline is tight but fine."
+    # 25+ words: below _SHORT_INPUT_WORDS an unchanged input passes on
+    # the conservative floor regardless of threshold (by design), which
+    # would mask the calibrated-threshold behavior under test here.
+    draft = (
+        "Quick note: the plan holds, the timeline is tight but fine, the "
+        "review lands Thursday, and the launch window stays exactly where "
+        "we set it last week."
+    )
     fidelity, _ = AxisProfile(
         mean=q.target_profile, std=model.baseline.std
     ).fidelity(score_text(draft))

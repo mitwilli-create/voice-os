@@ -50,6 +50,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_draft.add_argument("--stakes", default=None)
     p_draft.add_argument("--medium", default=None)
     p_draft.add_argument("--max-revisions", type=int, default=2)
+    p_draft.add_argument(
+        "--redraft",
+        action="store_true",
+        help="the input is finished writing being re-voiced: output "
+        "sentences the input does not entail block a pass",
+    )
     p_draft.add_argument("--run-id", default=None)
     p_draft.add_argument(
         "--file", default=None, help="read draft text from a file instead of stdin"
@@ -111,6 +117,7 @@ def _cmd_draft(args: argparse.Namespace) -> int:
         stakes=args.stakes,
         medium=args.medium,
         max_revisions=args.max_revisions,
+        redraft=args.redraft,
         run_id=args.run_id,
         corpus_path=args.corpus_path,
         chunks_dir=args.chunks_dir,
