@@ -366,10 +366,12 @@ def format_flags(input_text: str, output_text: str) -> list[str]:
 # when the output introduces one the input did not contain: that diff is
 # exactly the escalation the field report documented ("pursuing its
 # critics with legal tools" -> "hunting its critics").
+# "deadly" is deliberately absent: its stem collides with plain "dead"
+# ("the line went dead") and "lethal" covers the register.
 _CHARGED_TERMS = (
     "hunt", "hunting", "hunted",
     "war", "warfare", "weapon", "weaponize", "weaponized",
-    "lethal", "deadly",
+    "lethal",
     "destroy", "destroyed", "destroying",
     "crush", "crushed", "crushing",
     "attack", "attacked", "attacking", "assault",
@@ -379,19 +381,31 @@ _CHARGED_TERMS = (
 )
 
 
+def _charged_key(word: str) -> str:
+    """Family key for charged-term matching: the crude stem, minus a
+    trailing "e" so "-ed"/"-ing" strips of -e verbs still meet their
+    base form ("annihilated" -> "annihilat" == "annihilate")."""
+    stem = _stem(word)
+    return stem[:-1] if stem.endswith("e") else stem
+
+
+_CHARGED_KEYS = {_charged_key(term) for term in _CHARGED_TERMS}
+
+
 def escalated_diction(input_text: str, output_text: str) -> list[str]:
     """Charged terms present in the output but absent from the input.
 
-    Reported as the exact configured term found in the output (never a
-    lossy stem like "weaponiz"); the input side suppresses by stem
-    family so "hunted" in the input covers "hunting" in the output.
+    Matching is by stem family so inflections ("slaughtering",
+    "annihilated") are caught; the flagged entry is the actual output
+    word, never a lossy stem. The input side suppresses by the same
+    family, so "hunted" in the input covers "hunting" in the output.
     """
-    input_stems = {_stem(w) for w in _tokens(input_text)}
-    output_terms = set(_tokens(output_text))
-    return sorted(
-        term for term in _CHARGED_TERMS
-        if term in output_terms and _stem(term) not in input_stems
-    )
+    input_keys = {_charged_key(w) for w in _tokens(input_text)}
+    return sorted({
+        word for word in _tokens(output_text)
+        if _charged_key(word) in _CHARGED_KEYS
+        and _charged_key(word) not in input_keys
+    })
 
 
 # ---------------------------------------------------------------- aggregate

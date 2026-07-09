@@ -258,6 +258,25 @@ class TestFormatAndDiction:
             "they hunted for answers", "they kept hunting for answers"
         ) == []
 
+    def test_inflected_charged_terms_are_caught(self):
+        cases = {
+            "annihilating": "the review annihilating the proposal",
+            "slaughtered": "the numbers slaughtered the forecast",
+            "gossiping": "reporters gossiping about the filing",
+            "weaponizing": "weaponizing the complaint process",
+        }
+        for word, output in cases.items():
+            assert conservation.escalated_diction(
+                "a neutral description of the events", output
+            ) == [word], word
+
+    def test_plain_dead_is_not_charged(self):
+        # "deadly" is excluded from the lexicon precisely because its
+        # stem collides with ordinary "dead".
+        assert conservation.escalated_diction(
+            "the line was quiet", "the line went dead"
+        ) == []
+
 
 # ---------------------------------------------------------- aggregate
 
