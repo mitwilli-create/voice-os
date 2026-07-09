@@ -278,6 +278,72 @@ class TestFormatAndDiction:
         ) == []
 
 
+# ------------------------------------------------- entity-aware diction
+
+
+class TestNamedEntities:
+    def test_mid_sentence_names_and_orgs(self):
+        entities = conservation.named_entities(
+            "Anchor Mariana Atencio confirmed it while ABC News and "
+            "Univision carried the feed."
+        )
+        # A leading capitalized title rides along in the run ("Anchor
+        # Mariana Atencio"); the person is still anchored.
+        assert any("Mariana Atencio" in name for name in entities)
+        assert "ABC News" in entities
+        assert "Univision" in entities
+
+    def test_sentence_initial_name_resolves_when_anchored_elsewhere(self):
+        text = (
+            "Scientology pursued the story for weeks. The lawyers for "
+            "Scientology watched every broadcast."
+        )
+        assert "Scientology" in conservation.named_entities(text)
+
+    def test_sentence_case_words_are_not_entities(self):
+        entities = conservation.named_entities(
+            "Running it taught me the hard problem. Calling it meant "
+            "restacking the block. December is always busy."
+        )
+        assert entities == []
+
+    def test_acronyms_count_even_sentence_initial(self):
+        assert "RTS" in conservation.named_entities(
+            "RTS honored the program that season."
+        )
+
+
+class TestDictionEscalations:
+    SCIENTOLOGY_INPUT = (
+        "The organization was pursuing its critics with legal tools "
+        "while Scientology lawyers watched the broadcast closely."
+    )
+
+    def test_scientology_receipt_reports_entity_context(self):
+        output = (
+            "The organization was hunting its critics while Scientology "
+            "lawyers watched the broadcast closely."
+        )
+        escalations = conservation.diction_escalations(
+            self.SCIENTOLOGY_INPUT, output
+        )
+        assert len(escalations) == 1
+        assert escalations[0]["term"] == "hunting"
+        assert escalations[0]["entities"] == ["Scientology"]
+
+    def test_escalation_without_a_named_party_stays_a_plain_flag(self):
+        inp = "the process kept pursuing every open item on the list"
+        out = "the process kept hunting every open item on the list"
+        assert conservation.escalated_diction(inp, out) == ["hunting"]
+        assert conservation.diction_escalations(inp, out) == []
+
+    def test_charged_input_produces_no_escalations(self):
+        assert conservation.diction_escalations(
+            self.SCIENTOLOGY_INPUT.replace("pursuing", "hunting"),
+            self.SCIENTOLOGY_INPUT.replace("pursuing", "hunting"),
+        ) == []
+
+
 # ---------------------------------------------------------- aggregate
 
 
@@ -289,6 +355,7 @@ def test_check_is_json_safe_and_stable_keyed():
         "dropped_modifiers",
         "format_flags",
         "diction_flags",
+        "diction_escalations",
     }
     json.dumps(result)
 

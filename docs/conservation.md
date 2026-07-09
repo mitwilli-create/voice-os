@@ -32,6 +32,7 @@ was damaged, which was always a defect.
 | `dropped_modifiers` — precision hedges within two tokens before a numeral ("roughly fifty"), the modifier slot directly after it ("four-month **electrical** blackout"), framing labels ("on air", "design targets", "internal figure") | hurricane-maria, builder-turn, jazz-jennings qualifier drops | advisory + revision signal |
 | `format_flags` — markdown lists/headings introduced into prose input | trans-navy-panel bullet leak | advisory + revision signal |
 | `diction_flags` — charged terms in the output the input never used | "pursuing its critics" → "hunting its critics" | advisory + revision signal |
+| `diction_escalations` — a `diction_flags` term sharing a sentence with a heuristic named entity (stdlib sentence-case NER: mid-sentence capitalized runs, acronyms, and sentence-initial names anchored elsewhere in the text; no model, so lowercase particles like "bin" split a name) | the same receipt, which mattered precisely because Scientology was in range | advisory + stronger revision signal naming the party |
 
 Calibration: against the site pass's 17 original/human-approved body
 pairs the full check set produces zero false flags, while every
@@ -81,21 +82,37 @@ audit signal.
 list markers, decorative dashes drop, and every other run becomes a
 comma pause. The scrub never emits the spaced-hyphen tell `" - "`.
 
-## Batch callers: signature moves
+## Batch callers: signature moves and the avoid list
 
 Single-call architecture cannot see corpus-level convergence. Across
 the 17 independent runs of the site pass the same signature moves
-recurred until they read as a house tic (report class 6). When
-voicing a batch destined for one surface, diversify or budget these:
+recurred until they read as a house tic (report class 6). The
+catalog (`voice_os/moves.py`):
 
-- fragment date openers: "December 2007." / "October 2014."
-- "X. Not Y." constructions
-- single-fragment closers, and punch-tag closers: "That's the whole
-  game." / "Every time." / "On purpose." / "That's the point."
-  (formulaic appended emphatics; the claims diff skips fragments
-  under 3 content words by design, so style control is the caller's)
-- staccato "No X. No Y. No Z." runs
+| Key | Move |
+|---|---|
+| `fragment-date-opener` | "December 2007." / "October 2014." bare-date openings |
+| `x-not-y` | "X. Not Y." corrective-fragment constructions |
+| `no-x-run` | staccato "No X. No Y. No Z." fragment runs |
+| `punch-tag-closer` | "That's the whole point." / "Every time." / "On purpose." emphatic tags |
+| `fragment-closer` | any ≤4-word unquoted closing fragment |
 
-A per-batch avoid-list parameter is parked as future work; until
-then, batch callers should sample outputs across the batch and
-rotate any move appearing in more than ~3 of 17 items.
+Detection always runs; every envelope reports what the output used in
+the additive `signature_moves.detected` field, so a batch caller can
+tally moves across items and rotate any move converging past ~3 of
+17. To opt a run out of specific moves, pass
+`draft(avoid=["fragment-date-opener", ...])` or CLI
+`--avoid fragment-date-opener,punch-tag-closer` (repeatable): the
+persona is steered away, and a detected avoided move blocks a pass
+(revise, then reject) the same way a redraft entailment failure does.
+Unknown keys fail fast with the catalog listed. One precedence rule:
+if a sub-25-word input is retained unchanged, conservation outranks
+the avoid list; the violation is still reported for the caller.
+
+```json
+"signature_moves": {
+    "detected": {"fragment-date-opener": ["October 2014."]},
+    "avoid": ["punch-tag-closer"],
+    "violations": []
+}
+```

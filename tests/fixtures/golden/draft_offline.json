@@ -1,6 +1,7 @@
 {
   "banned_hits": [],
   "conservation": {
+    "diction_escalations": [],
     "diction_flags": [],
     "dropped_modifiers": [],
     "format_flags": [],
@@ -66,20 +67,25 @@
   ],
   "revisions": 2,
   "run_id": "<run-id>",
+  "signature_moves": {
+    "avoid": [],
+    "detected": {},
+    "violations": []
+  },
   "trace": [
     "prepare: context resolved (sources: {'channel': 'heuristic', 'medium': 'absent', 'audience': 'heuristic', 'recipient': 'absent', 'situation': 'heuristic', 'stakes': 'heuristic', 'goal': 'heuristic', 'tone': 'mined', 'exemplars': 'absent'})",
     "prepare: kb snapshot <snapshot-id> (2 files)",
     "generate: mode=offline, notes=2",
     "critique: 2 findings (mode=offline)",
     "qa_gate: gate=cycle -> revise (fidelity 0.638, revision 0)",
-    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False",
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 moves=0/0 blocked=False retained=False",
     "revise: revision 1 (mode=offline, 8 signals)",
     "critique: 0 findings (mode=offline)",
     "qa_gate: gate=cycle -> revise (fidelity 0.677, revision 1)",
-    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False",
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 moves=0/0 blocked=False retained=False",
     "revise: revision 2 (mode=offline, 7 signals)",
     "critique: 0 findings (mode=offline)",
     "qa_gate: gate=cycle -> reject (fidelity 0.677, revision 2)",
-    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 blocked=False retained=False"
+    "qa_gate: conservation unsupported=0 quotes=0 modifiers=0 moves=0/0 blocked=False retained=False"
   ]
 }

@@ -408,6 +408,113 @@ def escalated_diction(input_text: str, output_text: str) -> list[str]:
     })
 
 
+# ------------------------------------------------------- named entities
+
+# Capitalized words that are not names: months, weekdays, and the
+# pronoun/sentence-furniture set the sentence-case rule cannot catch.
+_ENTITY_SKIP = frozenset(
+    """
+    january february march april may june july august september october
+    november december monday tuesday wednesday thursday friday saturday
+    sunday i i'm i've i'll i'd the a an and but or so yet no not
+    """.split()
+)
+
+_CAPITALIZED = re.compile(r"^[A-Z][A-Za-z&.'-]*$")
+
+
+def named_entities(text: str) -> list[str]:
+    """Heuristic named entities: runs of capitalized words.
+
+    Deliberately dependency-free (the core is stdlib-only and
+    offline-deterministic), so this is sentence-case NER, not a model:
+    a run counts when it sits mid-sentence, spans two or more words,
+    is an acronym, or (for a sentence-initial single word) also
+    appears as an entity mid-sentence elsewhere in the text, so
+    "Scientology pursued..." still resolves once Scientology shows up
+    anywhere else. Lowercase particles inside names ("bin", "van")
+    split the run; months, weekdays, and capitalized sentence
+    furniture are skipped. Good enough to anchor a diction flag, not a
+    general-purpose extractor.
+    """
+    runs: list[tuple[str, bool]] = []  # (name, is_initial_single_word)
+    for sentence in split_sentences(text):
+        tokens = [t for t in _TOKEN_SPLIT.split(sentence) if t]
+        run: list[str] = []
+        run_start = 0
+        for index, token in enumerate(tokens + [""]):
+            word = token.strip(".,")
+            if word and _CAPITALIZED.match(word) and \
+                    word.lower() not in _ENTITY_SKIP:
+                if not run:
+                    run_start = index
+                run.append(word)
+                continue
+            if run:
+                initial_single = run_start == 0 and len(run) == 1
+                runs.append((" ".join(run), initial_single))
+                run = []
+
+    anchored = {
+        name.lower() for name, initial_single in runs
+        if not initial_single or name.isupper()
+    }
+    entities: list[str] = []
+    seen: set[str] = set()
+    for name, initial_single in runs:
+        if initial_single and not name.isupper() and \
+                name.lower() not in anchored:
+            continue
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            entities.append(name)
+    return entities
+
+
+def diction_escalations(input_text: str, output_text: str) -> list[dict]:
+    """Escalated charged terms aimed at named third parties.
+
+    The field report's class 3 receipt ("pursuing its critics with
+    legal tools" -> "hunting its critics", on a litigation-adjacent
+    Scientology passage) is dangerous precisely because a named party
+    is in range. Every escalated_diction term that shares a sentence
+    with a heuristic named entity is reported with that context.
+    Advisory, like the plain diction flags.
+    """
+    terms = escalated_diction(input_text, output_text)
+    if not terms:
+        return []
+    term_keys = {_charged_key(t): t for t in terms}
+    # Entities resolve over the whole output so a sentence-initial name
+    # anchored elsewhere still counts in the sentence being judged.
+    all_entities = named_entities(output_text)
+    escalations = []
+    for sentence in split_sentences(output_text):
+        words = _tokens(sentence)
+        hit_terms = sorted({
+            term_keys[_charged_key(w)] for w in words
+            if _charged_key(w) in term_keys
+        })
+        if not hit_terms:
+            continue
+        sentence_lower = sentence.lower()
+        entities = [
+            name for name in all_entities
+            if re.search(
+                r"\b" + re.escape(name.lower()) + r"\b", sentence_lower
+            )
+        ]
+        if not entities:
+            continue
+        for term in hit_terms:
+            escalations.append({
+                "term": term,
+                "entities": entities,
+                "sentence": sentence,
+            })
+    return escalations
+
+
 # ---------------------------------------------------------------- aggregate
 
 def check(input_text: str, output_text: str) -> dict:
@@ -415,7 +522,7 @@ def check(input_text: str, output_text: str) -> dict:
 
     Keys are stable API (the envelope's additive `conservation` field):
     unsupported_sentences, quote_violations, dropped_modifiers,
-    format_flags, diction_flags.
+    format_flags, diction_flags, diction_escalations.
     """
     return {
         "unsupported_sentences": unsupported_sentences(input_text, output_text),
@@ -423,4 +530,5 @@ def check(input_text: str, output_text: str) -> dict:
         "dropped_modifiers": dropped_modifiers(input_text, output_text),
         "format_flags": format_flags(input_text, output_text),
         "diction_flags": escalated_diction(input_text, output_text),
+        "diction_escalations": diction_escalations(input_text, output_text),
     }

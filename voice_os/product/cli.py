@@ -56,6 +56,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="the input is finished writing being re-voiced: output "
         "sentences the input does not entail block a pass",
     )
+    p_draft.add_argument(
+        "--avoid",
+        action="append",
+        default=None,
+        metavar="MOVE",
+        help="signature move this run must not use (repeatable, or "
+        "comma-separated); known moves: fragment-date-opener, x-not-y, "
+        "no-x-run, punch-tag-closer, fragment-closer",
+    )
     p_draft.add_argument("--run-id", default=None)
     p_draft.add_argument(
         "--file", default=None, help="read draft text from a file instead of stdin"
@@ -108,6 +117,12 @@ def _read_text(args: argparse.Namespace) -> str:
 
 def _cmd_draft(args: argparse.Namespace) -> int:
     text = _read_text(args)
+    avoid = [
+        key.strip()
+        for chunk in (args.avoid or [])
+        for key in chunk.split(",")
+        if key.strip()
+    ]
     result = draft(
         text,
         channel=args.channel,
@@ -118,6 +133,7 @@ def _cmd_draft(args: argparse.Namespace) -> int:
         medium=args.medium,
         max_revisions=args.max_revisions,
         redraft=args.redraft,
+        avoid=avoid or None,
         run_id=args.run_id,
         corpus_path=args.corpus_path,
         chunks_dir=args.chunks_dir,
