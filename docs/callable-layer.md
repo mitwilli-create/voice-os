@@ -200,6 +200,9 @@ Returns a JSON-safe result envelope:
     "revisions": 1,
     "revision_history": ["..."],
     "banned_hits": [],
+    "conservation": {...},         # additive (2026-07-08): claims diff, quote
+                                   # violations, dropped modifiers; see
+                                   # docs/conservation.md
     "mode": "live" | "offline",
     "context": {...},              # normalized VoiceContext dict
     "kb": {...},                   # snapshot id + file hashes or {"status": "absent"}

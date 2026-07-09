@@ -16,7 +16,15 @@ from .qa import REPLACEMENTS, find_banned, scrub_em_dashes
 _GENERATIVE_SYSTEM = (
     "You are the generative persona in a voice-fidelity pipeline. Revise the "
     "draft to match the target voice profile while preserving its meaning and "
-    "all factual content. Return only the revised draft, no commentary."
+    "all factual content. Hard rules (2026-07-08 field report): never add "
+    "claims, opinions, or facts the draft does not contain; text inside "
+    "quotation marks is untouchable and must be reproduced verbatim, marks "
+    "included; keep hedges and qualifiers that frame facts (roughly, about, "
+    "on air, design targets, internal figure); never intensify wording about "
+    "named people or organizations; mirror the draft's formatting and never "
+    "introduce lists or markdown the draft does not have; restructure around "
+    "dashes with commas, colons, periods, or parentheses. Return only the "
+    "revised draft, no commentary."
 )
 
 _ADVERSARIAL_SYSTEM = (

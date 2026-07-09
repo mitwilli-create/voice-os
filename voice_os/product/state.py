@@ -24,6 +24,11 @@ class VoiceState(TypedDict):
     stakes: str          # always canonical here; None never reaches state
     medium: str | None
     max_revisions: int
+    # redraft contract: the input is finished writing being re-voiced, so
+    # every output sentence must be entailed by the input; unsupported
+    # sentences block a pass. False = compose semantics (conservation is
+    # still measured and reported, never blocking).
+    redraft: bool
 
     # model/KB resolution inputs (serializable path strings; None = default)
     corpus_path: str | None
@@ -71,6 +76,10 @@ class VoiceState(TypedDict):
     revision_signals: list[str]  # latest gate signals, consumed by revise
     banned_hits: list[str]
     persona_modes: list[str]     # "live" / "offline" observed across nodes
+    # content-conservation results from the latest qa_gate pass
+    # (voice_os/conservation.py): unsupported_sentences, quote_violations,
+    # dropped_modifiers, format_flags, diction_flags, input_retained.
+    conservation: dict
 
     # observability (append-only reducers)
     revision_history: Annotated[list[str], operator.add]
@@ -88,6 +97,7 @@ def initial_state(
     stakes: str,
     medium: str | None,
     max_revisions: int,
+    redraft: bool = False,
     corpus_path: str | None = None,
     chunks_dir: str | None = None,
     mined_dir: str | None = None,
@@ -106,6 +116,7 @@ def initial_state(
         "stakes": stakes,
         "medium": medium,
         "max_revisions": max_revisions,
+        "redraft": redraft,
         "corpus_path": corpus_path,
         "chunks_dir": chunks_dir,
         "mined_dir": mined_dir,
@@ -132,6 +143,7 @@ def initial_state(
         "revision_signals": [],
         "banned_hits": [],
         "persona_modes": [],
+        "conservation": {},
         "revision_history": [],
         "fidelity_scores": {},
         "trace_notes": [],
@@ -139,8 +151,15 @@ def initial_state(
 
 
 def build_result(state: dict, run_id: str) -> dict:
-    """Project a finished graph state into the public JSON-safe envelope."""
+    """Project a finished graph state into the public JSON-safe envelope.
+
+    The `conservation` field is additive (2026-07-08 field report):
+    existing callers parsing mode/decision/fidelity/banned_hits/
+    output_text are untouched.
+    """
     modes = state.get("persona_modes", [])
+    conservation = dict(state.get("conservation") or {})
+    conservation.setdefault("redraft", bool(state.get("redraft", False)))
     return {
         "run_id": run_id,
         "decision": state.get("qa_decision", "reject"),
@@ -149,6 +168,7 @@ def build_result(state: dict, run_id: str) -> dict:
         "revisions": state.get("revision_count", 0),
         "revision_history": list(state.get("revision_history", [])),
         "banned_hits": list(state.get("banned_hits", [])),
+        "conservation": conservation,
         "mode": "live" if "live" in modes else "offline",
         "context": {
             "channel": state.get("channel"),

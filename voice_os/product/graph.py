@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
+from .. import conservation
 from .. import llm
 from ..axes import AxisProfile, score_text
 from ..model import VoiceModel
@@ -342,6 +343,60 @@ def _length_target(state: VoiceState) -> int | None:
     return len(state["input_text"].split()) or None
 
 
+# Below this input length the pipeline is conservative: micro-copy at the
+# calibration floor degraded in 14/17 pull quotes in the 2026-07-08 site
+# pass, so the input is returned unchanged unless the rewrite clearly
+# scores better and conserves content.
+_SHORT_INPUT_WORDS = 25
+_SHORT_IMPROVE_MARGIN = 0.05
+
+
+def _fidelity(text: str, state: VoiceState) -> float:
+    calibrated = AxisProfile(
+        mean=state["target_profile"], std=state["baseline_std"]
+    )
+    overall, _ = calibrated.fidelity(score_text(text))
+    return overall
+
+
+def _short_input_guard(state: VoiceState, candidate: str) -> tuple[str, str | None]:
+    """Conservative mode for sub-_SHORT_INPUT_WORDS inputs.
+
+    Quote spans are protected in every mode. The entailment and
+    fidelity-margin retentions apply only under the redraft contract:
+    a redraft candidate is kept only when it adds no unentailed content
+    and beats the input's own fidelity by a clear margin, while a
+    compose brief is meant to be expanded and must not be handed back
+    verbatim. Returns the surviving text plus a trace note explaining a
+    retention (None when the candidate stood).
+    """
+    input_text = state["input_text"]
+    if len(input_text.split()) >= _SHORT_INPUT_WORDS or candidate == input_text:
+        return candidate, None
+    # Banned enforcement outranks conservative retention: while the
+    # input carries banned phrases the gate can never pass it, so the
+    # rewrite machinery must be left free to remove them.
+    if find_banned(input_text, state["banned"]):
+        return candidate, None
+    if conservation.quote_violations(input_text, candidate):
+        return input_text, (
+            "conservative: rewrite modified a quoted span; input retained"
+        )
+    if not state.get("redraft"):
+        return candidate, None
+    if conservation.unsupported_sentences(input_text, candidate):
+        return input_text, (
+            "conservative: rewrite added unentailed content; input retained"
+        )
+    gain = _fidelity(candidate, state) - _fidelity(input_text, state)
+    if gain < _SHORT_IMPROVE_MARGIN:
+        return input_text, (
+            f"conservative: rewrite gain {gain:+.3f} below the "
+            f"{_SHORT_IMPROVE_MARGIN:.2f} margin; input retained"
+        )
+    return candidate, None
+
+
 def generate(state: VoiceState) -> dict:
     """First-pass voice transformation of the input text."""
     persona = GenerativePersona()
@@ -355,13 +410,15 @@ def generate(state: VoiceState) -> dict:
         kb_guidance=state.get("kb_guidance") or None,
         pattern_guidance=state.get("pattern_guidance") or None,
     )
+    text, guard_note = _short_input_guard(state, result.text)
+    notes = [f"generate: mode={result.mode}, notes={len(result.notes)}"]
+    if guard_note:
+        notes.append(f"generate: {guard_note}")
     return {
-        "current_draft": result.text,
+        "current_draft": text,
         "persona_modes": _merge_modes(state, result.mode),
         **_stamp_live_model(state, result.mode),
-        "trace_notes": [
-            f"generate: mode={result.mode}, notes={len(result.notes)}"
-        ],
+        "trace_notes": notes,
     }
 
 
@@ -409,7 +466,51 @@ def qa_gate(state: VoiceState) -> dict:
         **gate_kwargs,
     )
 
-    if result.decision == "pass":
+    # Content conservation (voice_os/conservation.py): the gate above
+    # scores voice alignment; this asks whether the draft says what the
+    # input said (2026-07-08 field report, headline finding). Quote
+    # violations always block a pass; unentailed sentences block under
+    # the redraft contract; modifier/format/diction diffs are advisory
+    # and surface in the envelope and the revision signals.
+    conserve = conservation.check(state["input_text"], draft_text)
+    input_words = len(state["input_text"].split())
+    conserve["input_retained"] = (
+        input_words < _SHORT_INPUT_WORDS
+        and draft_text == state["input_text"]
+    )
+
+    revision_signals = list(result.revision_signals)
+    for span in conserve["quote_violations"]:
+        revision_signals.append(
+            f"restore this quoted span verbatim, marks included: {span}"
+        )
+    if state.get("redraft"):
+        for finding in conserve["unsupported_sentences"]:
+            revision_signals.append(
+                "remove or rewrite this sentence; the input does not "
+                f"support it: {finding['sentence']}"
+            )
+    for dropped in conserve["dropped_modifiers"]:
+        anchor = f" next to '{dropped['anchor']}'" if dropped["anchor"] else ""
+        revision_signals.append(
+            f"restore the dropped qualifier '{dropped['modifier']}'{anchor}"
+        )
+    revision_signals.extend(conserve["format_flags"])
+    for term in conserve["diction_flags"]:
+        revision_signals.append(
+            f"'{term}' escalates diction the input does not have; match "
+            "the input's register"
+        )
+
+    blocked = bool(conserve["quote_violations"]) or (
+        state.get("redraft") and bool(conserve["unsupported_sentences"])
+    )
+
+    if conserve["input_retained"] and not result.banned_hits:
+        # Conservative floor: an unchanged short input is the author's
+        # own text; returning it is never a reject.
+        decision = "pass"
+    elif result.decision == "pass" and not blocked:
         decision = "pass"
     elif state["revision_count"] >= state["max_revisions"]:
         decision = "reject"
@@ -420,8 +521,6 @@ def qa_gate(state: VoiceState) -> dict:
     # gate decision). Live drafts measured 1.2x-3.1x the input length and
     # length_ratio correlated -0.60 with the judge's same_author score, so
     # overruns feed the next revision cycle as an explicit signal.
-    revision_signals = list(result.revision_signals)
-    input_words = len(state["input_text"].split())
     draft_words = len(draft_text.split())
     if input_words and draft_words > 1.4 * input_words:
         revision_signals.append(
@@ -430,6 +529,13 @@ def qa_gate(state: VoiceState) -> dict:
             f"{input_words} words"
         )
 
+    conserve_note = (
+        f"qa_gate: conservation unsupported={len(conserve['unsupported_sentences'])} "
+        f"quotes={len(conserve['quote_violations'])} "
+        f"modifiers={len(conserve['dropped_modifiers'])} "
+        f"blocked={blocked} retained={conserve['input_retained']}"
+    )
+
     return {
         "qa_decision": decision,
         "fidelity_scores": {
@@ -437,10 +543,12 @@ def qa_gate(state: VoiceState) -> dict:
             "per_axis": result.per_axis,
         },
         "banned_hits": list(result.banned_hits),
+        "conservation": conserve,
         "revision_signals": revision_signals,
         "trace_notes": [
             f"qa_gate: gate={result.decision} -> {decision} "
-            f"(fidelity {result.fidelity:.3f}, revision {state['revision_count']})"
+            f"(fidelity {result.fidelity:.3f}, revision {state['revision_count']})",
+            conserve_note,
         ],
     }
 
@@ -464,16 +572,20 @@ def revise(state: VoiceState) -> dict:
         kb_guidance=state.get("kb_guidance") or None,
         pattern_guidance=state.get("pattern_guidance") or None,
     )
+    text, guard_note = _short_input_guard(state, result.text)
+    notes = [
+        f"revise: revision {state['revision_count'] + 1} "
+        f"(mode={result.mode}, {len(signals)} signals)"
+    ]
+    if guard_note:
+        notes.append(f"revise: {guard_note}")
     return {
-        "current_draft": result.text,
+        "current_draft": text,
         "revision_count": state["revision_count"] + 1,
         "revision_history": [state["current_draft"]],
         "persona_modes": _merge_modes(state, result.mode),
         **_stamp_live_model(state, result.mode),
-        "trace_notes": [
-            f"revise: revision {state['revision_count'] + 1} "
-            f"(mode={result.mode}, {len(signals)} signals)"
-        ],
+        "trace_notes": notes,
     }
 
 

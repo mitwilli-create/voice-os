@@ -61,6 +61,7 @@ def draft(
     stakes: str | None = None,
     medium: str | None = None,
     max_revisions: int = 2,
+    redraft: bool = False,
     run_id: str | None = None,
     corpus_path: str | None = None,
     chunks_dir: str | None = None,
@@ -75,9 +76,16 @@ def draft(
     canonical context is validated fail-fast, and the run is
     checkpointed under var/ for later inspection via run_history().
 
+    redraft=True declares the input finished writing being re-voiced:
+    every output sentence must be entailed by the input, and unentailed
+    sentences block a pass (they force revision, then reject). With
+    redraft=False (compose semantics) conservation is still measured
+    and reported in the envelope, never blocking. Quote spans are
+    inviolable in both modes.
+
     Returns a JSON-safe envelope: run_id, decision ("pass" or
     "reject"), output_text, fidelity, revisions, revision_history,
-    banned_hits, mode, context, kb, trace.
+    banned_hits, conservation, mode, context, kb, trace.
     """
     if not text or not text.strip():
         raise ValueError("text must be a non-empty string")
@@ -99,6 +107,7 @@ def draft(
     initial = initial_state(
         input_text=text,
         max_revisions=max_revisions,
+        redraft=redraft,
         corpus_path=corpus_path,
         chunks_dir=chunks_dir,
         mined_dir=mined_dir,
