@@ -484,16 +484,17 @@ def diction_escalations(input_text: str, output_text: str) -> list[dict]:
     terms = escalated_diction(input_text, output_text)
     if not terms:
         return []
-    term_keys = {_charged_key(t): t for t in terms}
+    term_keys = {_charged_key(t) for t in terms}
     # Entities resolve over the whole output so a sentence-initial name
     # anchored elsewhere still counts in the sentence being judged.
     all_entities = named_entities(output_text)
     escalations = []
     for sentence in split_sentences(output_text):
-        words = _tokens(sentence)
+        # Report the sentence's own surface form: with two inflections
+        # of one family in different sentences, each sentence must name
+        # the word it actually contains.
         hit_terms = sorted({
-            term_keys[_charged_key(w)] for w in words
-            if _charged_key(w) in term_keys
+            w for w in _tokens(sentence) if _charged_key(w) in term_keys
         })
         if not hit_terms:
             continue
