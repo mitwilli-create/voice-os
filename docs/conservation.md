@@ -42,13 +42,16 @@ pipeline's own substitutions are never flagged as invented.
 ## Conservative mode below 25 words
 
 Micro-copy at the calibration floor degraded in 14/17 pull quotes in
-the report. For inputs under 25 words the generate and revise nodes
-keep a rewrite only when it conserves content (no quote violations,
-no unentailed sentences) and beats the input's own fidelity by at
-least 0.05; otherwise the input is returned unchanged, and an
-unchanged short input passes rather than rejecting (the author's own
-words are never "below the bar"). The guard is suspended while the
-input carries banned phrases so the scrub machinery can still work.
+the report. For inputs under 25 words, quote spans are protected in
+every mode; under the redraft contract the generate and revise nodes
+additionally keep a rewrite only when it adds no unentailed content
+and beats the input's own fidelity by at least 0.05. Otherwise the
+input is returned unchanged, and an unchanged short input passes
+rather than rejecting (the author's own words are never "below the
+bar"). Compose briefs are exempt from the entailment and margin
+retentions: a brief is meant to be expanded, not handed back. The
+guard is suspended while the input carries banned phrases so the
+scrub machinery can still work.
 
 ## Envelope field (additive)
 

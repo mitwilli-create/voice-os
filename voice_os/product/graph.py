@@ -362,11 +362,13 @@ def _fidelity(text: str, state: VoiceState) -> float:
 def _short_input_guard(state: VoiceState, candidate: str) -> tuple[str, str | None]:
     """Conservative mode for sub-_SHORT_INPUT_WORDS inputs.
 
-    The candidate rewrite is kept only when it conserves content (no
-    quote violations, no unentailed sentences) and beats the input's own
-    fidelity by a clear margin. Otherwise the input is returned
-    unchanged; the second element is a trace note explaining a
-    retention, None when the candidate stood.
+    Quote spans are protected in every mode. The entailment and
+    fidelity-margin retentions apply only under the redraft contract:
+    a redraft candidate is kept only when it adds no unentailed content
+    and beats the input's own fidelity by a clear margin, while a
+    compose brief is meant to be expanded and must not be handed back
+    verbatim. Returns the surviving text plus a trace note explaining a
+    retention (None when the candidate stood).
     """
     input_text = state["input_text"]
     if len(input_text.split()) >= _SHORT_INPUT_WORDS or candidate == input_text:
@@ -380,6 +382,8 @@ def _short_input_guard(state: VoiceState, candidate: str) -> tuple[str, str | No
         return input_text, (
             "conservative: rewrite modified a quoted span; input retained"
         )
+    if not state.get("redraft"):
+        return candidate, None
     if conservation.unsupported_sentences(input_text, candidate):
         return input_text, (
             "conservative: rewrite added unentailed content; input retained"

@@ -158,13 +158,18 @@ def quote_violations(input_text: str, output_text: str) -> list[str]:
 
     Text inside quotation marks is someone's words; the pipeline must
     never touch it. Comparison normalizes curly/straight glyphs and is
-    otherwise exact.
+    otherwise exact; a span quoted N times in the input must appear at
+    least N times in the output, so dropping one of two identical
+    quotes is still a violation.
     """
     output_normalized = _normalize_quotes(output_text)
-    return [
-        span for span in quoted_spans(input_text)
-        if span not in output_normalized
-    ]
+    violations = []
+    counted: dict[str, int] = {}
+    for span in quoted_spans(input_text):
+        counted[span] = counted.get(span, 0) + 1
+        if output_normalized.count(span) < counted[span]:
+            violations.append(span)
+    return violations
 
 
 # ---------------------------------------------------------------- modifiers
@@ -195,6 +200,26 @@ _NUMBER_WORDS = frozenset(
     million billion dozen half quarter
     """.split()
 )
+
+# Word <-> digit equivalents so a rewrite of "fifty" to "50" (or back)
+# still counts as the numeral surviving; without this the modifier
+# check would silently skip and miss a dropped hedge.
+_WORD_TO_DIGIT = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+    "ten": "10", "eleven": "11", "twelve": "12", "thirteen": "13",
+    "fourteen": "14", "fifteen": "15", "sixteen": "16",
+    "seventeen": "17", "eighteen": "18", "nineteen": "19",
+    "twenty": "20", "thirty": "30", "forty": "40", "fifty": "50",
+    "sixty": "60", "seventy": "70", "eighty": "80", "ninety": "90",
+    "hundred": "100", "thousand": "1000", "million": "1000000",
+    "billion": "1000000000", "dozen": "12",
+}
+# First mapping wins on digit collisions ("twelve" and "dozen" both
+# map to 12; the reverse lookup prefers the plain number word).
+_DIGIT_TO_WORD: dict[str, str] = {}
+for _word, _digit in _WORD_TO_DIGIT.items():
+    _DIGIT_TO_WORD.setdefault(_digit, _word)
 
 # Hedges that adjudicate a number's precision. Position: immediately
 # before the numeral ("roughly fifty" — the hedge WAS the fact).
@@ -263,14 +288,24 @@ def dropped_modifiers(input_text: str, output_text: str) -> list[dict]:
                 "kind": "numeral-adjacent",
             })
 
+    def _numeral_survived(token: str) -> bool:
+        """The numeral, or a word/digit equivalent of it, is in the
+        output ("fifty" rewritten to "50" still anchors its hedge)."""
+        bare = token.lower().strip("'’-")
+        if _stem(bare) in output_vocab or token.lower() in output_lower:
+            return True
+        alias = _WORD_TO_DIGIT.get(bare) or _DIGIT_TO_WORD.get(bare)
+        return bool(alias) and bool(
+            re.search(r"\b" + re.escape(alias) + r"\b", output_lower)
+        )
+
     def _scan_sentence(input_tokens: list[str]) -> None:
         for index, token in enumerate(input_tokens):
             if not _is_numeric_token(token):
                 continue
             # The numeral itself must survive for a modifier check to
             # make sense; a lost numeral is the number-checker's finding.
-            if _stem(token.lower().strip("'’-")) not in output_vocab and \
-                    token.lower() not in output_lower:
+            if not _numeral_survived(token):
                 continue
             for neighbor in input_tokens[max(0, index - 2): index]:
                 bare = _bare(neighbor)
@@ -345,14 +380,18 @@ _CHARGED_TERMS = (
 
 
 def escalated_diction(input_text: str, output_text: str) -> list[str]:
-    """Charged terms present in the output but absent from the input."""
+    """Charged terms present in the output but absent from the input.
+
+    Reported as the exact configured term found in the output (never a
+    lossy stem like "weaponiz"); the input side suppresses by stem
+    family so "hunted" in the input covers "hunting" in the output.
+    """
     input_stems = {_stem(w) for w in _tokens(input_text)}
-    output_stems = {_stem(w) for w in _tokens(output_text)}
-    flagged = sorted({
-        _stem(term) for term in _CHARGED_TERMS
-        if _stem(term) in output_stems and _stem(term) not in input_stems
-    })
-    return flagged
+    output_terms = set(_tokens(output_text))
+    return sorted(
+        term for term in _CHARGED_TERMS
+        if term in output_terms and _stem(term) not in input_stems
+    )
 
 
 # ---------------------------------------------------------------- aggregate

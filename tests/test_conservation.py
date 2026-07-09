@@ -146,6 +146,14 @@ class TestQuoteSpans:
         straight = '"We\'re coming to you live" she said.'
         assert conservation.quote_violations(curly, straight) == []
 
+    def test_dropping_one_of_two_identical_quotes_is_a_violation(self):
+        original = 'First "hold the line" then again "hold the line" close.'
+        one_kept = 'First "hold the line" then again close.'
+        assert conservation.quote_violations(original, one_kept) == [
+            '"hold the line"'
+        ]
+        assert conservation.quote_violations(original, original) == []
+
 
 # ------------------------------------------------------ dropped modifiers
 
@@ -200,6 +208,22 @@ class TestDroppedModifiers:
             "roughly fifty agents", "a large fleet of agents"
         ) == []
 
+    def test_word_to_digit_rewrite_still_anchors_the_hedge(self):
+        # "fifty" rewritten to "50" is the same surviving numeral; the
+        # dropped hedge must still be caught (and vice versa).
+        flagged = conservation.dropped_modifiers(
+            "a fleet of roughly fifty agents", "a fleet of 50 agents"
+        )
+        assert [f["modifier"] for f in flagged] == ["roughly"]
+        flagged = conservation.dropped_modifiers(
+            "about 12 hours of work", "twelve hours of work"
+        )
+        assert [f["modifier"] for f in flagged] == ["about"]
+        # Hedge kept across the same rewrite: clean.
+        assert conservation.dropped_modifiers(
+            "a fleet of roughly fifty agents", "a fleet of roughly 50 agents"
+        ) == []
+
 
 # ------------------------------------------------------ format + diction
 
@@ -216,14 +240,22 @@ class TestFormatAndDiction:
         assert conservation.format_flags(BUILDER_TURN, BUILDER_TURN) == []
 
     def test_scientology_hunting_escalation_is_flagged(self):
+        # Reported as the exact output term, never a lossy stem.
         assert conservation.escalated_diction(
             "the organization pursuing its critics with legal tools",
             "the organization hunting its critics",
-        ) == ["hunt"]
+        ) == ["hunting"]
 
     def test_charged_term_already_in_input_is_not_flagged(self):
         assert conservation.escalated_diction(
             "they declared war on error", "they declared war on error"
+        ) == []
+
+    def test_input_stem_family_suppresses_output_variants(self):
+        # "hunted" in the input covers "hunting" in the output; the
+        # register was already there, not escalated.
+        assert conservation.escalated_diction(
+            "they hunted for answers", "they kept hunting for answers"
         ) == []
 
 
@@ -375,6 +407,29 @@ def test_short_input_guard_retains_input_against_weak_rewrites():
         BUILDER_TURN + " Extra.",
     )
     assert note is None
+
+
+def test_short_input_guard_lets_compose_briefs_expand():
+    pytest.importorskip("langgraph")
+    from voice_os.product import graph as graph_module
+
+    brief = "quick note to say the launch plan looks right, one timing question"
+    expansion = (
+        "The launch plan looks right to me. One question on timing: does "
+        "the Thursday window still hold if the review slips a day?"
+    )
+    state = _gate_state(brief, brief, redraft=False)
+    # Compose semantics: the brief is meant to be expanded, so the
+    # entailment and fidelity-margin retentions must not fire...
+    text, note = graph_module._short_input_guard(state, expansion)
+    assert text == expansion and note is None
+    # ...but quote spans are protected in every mode.
+    quoted = 'say the launch plan "looks right, full stop" to the team'
+    text, note = graph_module._short_input_guard(
+        _gate_state(quoted, quoted, redraft=False),
+        "say the launch plan looks right to the team",
+    )
+    assert text == quoted and "quoted span" in note
 
 
 def test_dropped_modifier_is_advisory_and_signaled():
