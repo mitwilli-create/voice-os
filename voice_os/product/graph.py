@@ -29,6 +29,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .. import conservation
 from .. import llm
+from .. import moves
 from ..axes import AxisProfile, score_text
 from ..model import VoiceModel
 from ..personas import AdversarialPersona, GenerativePersona
@@ -404,7 +405,8 @@ def generate(state: VoiceState) -> dict:
         state["input_text"],
         state["target_profile"],
         state["banned"],
-        list(state["guidance"]),
+        list(state["guidance"])
+        + moves.avoid_guidance(state.get("avoid") or []),
         exemplars=state.get("exemplars") or None,
         length_target_words=_length_target(state),
         kb_guidance=state.get("kb_guidance") or None,
@@ -501,14 +503,43 @@ def qa_gate(state: VoiceState) -> dict:
             f"'{term}' escalates diction the input does not have; match "
             "the input's register"
         )
+    for escalation in conserve["diction_escalations"]:
+        revision_signals.append(
+            f"'{escalation['term']}' intensifies wording about "
+            f"{', '.join(escalation['entities'])}; the input's register "
+            "must hold on named third parties"
+        )
 
-    blocked = bool(conserve["quote_violations"]) or (
-        state.get("redraft") and bool(conserve["unsupported_sentences"])
+    # Signature moves (voice_os/moves.py): detection always reports so
+    # batch callers can measure convergence; a move the caller opted
+    # out of blocks a pass.
+    avoid = list(state.get("avoid") or [])
+    detected = moves.detect(draft_text)
+    move_violations = [key for key in detected if key in avoid]
+    for key in move_violations:
+        instances = "; ".join(detected[key])
+        revision_signals.append(
+            f"avoided signature move '{key}' is present ({instances}); "
+            + moves.CATALOG[key]
+        )
+    signature_moves = {
+        "detected": detected,
+        "avoid": avoid,
+        "violations": move_violations,
+    }
+
+    blocked = (
+        bool(conserve["quote_violations"])
+        or bool(move_violations)
+        or (state.get("redraft") and bool(conserve["unsupported_sentences"]))
     )
 
     if conserve["input_retained"] and not result.banned_hits:
         # Conservative floor: an unchanged short input is the author's
-        # own text; returning it is never a reject.
+        # own text; returning it is never a reject. This outranks an
+        # avoided-move hit: if the caller's own input uses the move,
+        # conservation wins and the envelope still reports the
+        # violation for the caller to judge.
         decision = "pass"
     elif result.decision == "pass" and not blocked:
         decision = "pass"
@@ -533,6 +564,7 @@ def qa_gate(state: VoiceState) -> dict:
         f"qa_gate: conservation unsupported={len(conserve['unsupported_sentences'])} "
         f"quotes={len(conserve['quote_violations'])} "
         f"modifiers={len(conserve['dropped_modifiers'])} "
+        f"moves={len(detected)}/{len(move_violations)} "
         f"blocked={blocked} retained={conserve['input_retained']}"
     )
 
@@ -544,6 +576,7 @@ def qa_gate(state: VoiceState) -> dict:
         },
         "banned_hits": list(result.banned_hits),
         "conservation": conserve,
+        "signature_moves": signature_moves,
         "revision_signals": revision_signals,
         "trace_notes": [
             f"qa_gate: gate={result.decision} -> {decision} "
@@ -561,6 +594,7 @@ def revise(state: VoiceState) -> dict:
     signals = (
         list(state["revision_signals"])
         + list(state["guidance"])
+        + moves.avoid_guidance(state.get("avoid") or [])
         + [f"adversarial finding (previous cycle): {f}" for f in findings]
     )
     persona = GenerativePersona()

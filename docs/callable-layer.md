@@ -203,6 +203,9 @@ Returns a JSON-safe result envelope:
     "conservation": {...},         # additive (2026-07-08): claims diff, quote
                                    # violations, dropped modifiers; see
                                    # docs/conservation.md
+    "signature_moves": {...},      # additive (2026-07-08): detected house
+                                   # moves + avoid-list violations; see
+                                   # docs/conservation.md
     "mode": "live" | "offline",
     "context": {...},              # normalized VoiceContext dict
     "kb": {...},                   # snapshot id + file hashes or {"status": "absent"}

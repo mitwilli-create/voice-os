@@ -21,6 +21,7 @@ Design: docs/callable-layer.md.
 from __future__ import annotations
 
 from ..contexts import VoiceContext
+from ..moves import validate_avoid
 from .aliases import normalize_context
 from .kb import list_kb_snapshots, load_kb, snapshot_kb
 from .state import build_result, initial_state
@@ -62,6 +63,7 @@ def draft(
     medium: str | None = None,
     max_revisions: int = 2,
     redraft: bool = False,
+    avoid: list[str] | None = None,
     run_id: str | None = None,
     corpus_path: str | None = None,
     chunks_dir: str | None = None,
@@ -76,6 +78,12 @@ def draft(
     canonical context is validated fail-fast, and the run is
     checkpointed under var/ for later inspection via run_history().
 
+    avoid lists signature moves (voice_os/moves.py CATALOG keys, e.g.
+    "fragment-date-opener", "punch-tag-closer") this run must not use:
+    the persona is steered away from them and a detected avoided move
+    blocks a pass. Detection always runs and reports in the envelope's
+    signature_moves field so batch callers can measure convergence.
+
     redraft=True declares the input finished writing being re-voiced:
     every output sentence must be entailed by the input, and unentailed
     sentences block a pass (they force revision, then reject). With
@@ -85,12 +93,14 @@ def draft(
 
     Returns a JSON-safe envelope: run_id, decision ("pass" or
     "reject"), output_text, fidelity, revisions, revision_history,
-    banned_hits, conservation, mode, context, kb, trace.
+    banned_hits, conservation, signature_moves, mode, context, kb,
+    trace.
     """
     if not text or not text.strip():
         raise ValueError("text must be a non-empty string")
     if max_revisions < 0:
         raise ValueError("max_revisions must be >= 0")
+    avoid_canonical = validate_avoid(list(avoid or []))  # fail fast
 
     ctx = normalize_context(
         channel=channel,
@@ -108,6 +118,7 @@ def draft(
         input_text=text,
         max_revisions=max_revisions,
         redraft=redraft,
+        avoid=avoid_canonical,
         corpus_path=corpus_path,
         chunks_dir=chunks_dir,
         mined_dir=mined_dir,
