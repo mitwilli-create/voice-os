@@ -13,3 +13,28 @@ please don't hesitate to reach out
 moving forward
 per my last email
 keep the lines of communication open
+# --- Hype/slop vocabulary, merged from stack-ops styles/VoiceOS/AntiSlop.yml
+# on 2026-07-20. This file is the single source of truth; the Vale rule is
+# generated from it by stack-ops/scripts/gen-antislop.mjs. Literal phrases
+# only: qa.find_banned applies re.escape, so regex here would not work.
+robust
+seamless
+cutting-edge
+game-changing
+unlock
+delve
+tapestry
+testament to
+best-in-class
+revolutionize
+supercharge
+in today's landscape
+# Variant forms. The Vale rule is generated from this file and its morphology
+# group only covers regular suffixes, so irregular variants are listed here.
+# Both gates benefit: qa.find_banned matches literals, so these were missing
+# from Voice OS too.
+synergies
+game changer
+game-changer
+game changing
+

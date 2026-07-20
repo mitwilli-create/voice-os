@@ -27,3 +27,16 @@ sources/
 
 # product layer runtime data: checkpoint DB + KB snapshots contain personal data
 var/
+
+# ── Session working docs: stay on disk, never enter this PUBLIC repo ──
+# Ruled 2026-07-20. These are handover/audit notes, not product docs, and
+# several carry material that must not be published from a public GitHub repo:
+# PHASE1-JOB-SEEKING-CORPUS-MANIFEST quotes a real third party by name from
+# private recruiter outreach and lists dated job applications; feedback/ holds
+# career-strategy field reports about specific target companies. Model-routing
+# rules that allow this content on a cheap LLM path are about ROUTING, not
+# PUBLISHING, and do not apply here.
+HANDOFF-*.md
+PHASE1-*.md
+CV-*.md
+feedback/
