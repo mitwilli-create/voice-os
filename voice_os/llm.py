@@ -18,7 +18,7 @@ import sys
 
 import httpx
 
-DEFAULT_MODEL = os.environ.get("VOICE_OS_MODEL", "claude-opus-4-8")
+DEFAULT_MODEL = os.environ.get("VOICE_OS_MODEL", "claude-fable-5")
 DEFAULT_PROVIDER = os.environ.get("VOICE_OS_PROVIDER", "anthropic")
 
 try:
@@ -49,6 +49,10 @@ class RoutedText(str):
         instance.policy_outcome = policy_outcome
         instance.fallback_reason = fallback_reason
         return instance
+
+
+class ProviderRefusalError(RuntimeError):
+    """A successful provider response that declined to generate output."""
 
 
 def _warn_once(message: str) -> None:
@@ -102,17 +106,16 @@ def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
             max_tokens=max_tokens,
         )
 
-    client = get_client()
-    if client is None:
-        return None
     try:
-        response = client.messages.create(
-            model=DEFAULT_MODEL,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
+        return _anthropic_adapter(
+            {
+                "provider": DEFAULT_PROVIDER,
+                "model": DEFAULT_MODEL,
+                "system": system,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+            }
         )
-        return "".join(b.text for b in response.content if b.type == "text").strip()
     except Exception as exc:
         _warn_once(f"live persona call failed ({type(exc).__name__}: {exc})")
         return None
@@ -122,12 +125,21 @@ def _anthropic_adapter(request: dict) -> str:
     client = get_client()
     if client is None:
         raise RuntimeError("Anthropic client unavailable")
+    options = {
+        "model": request["model"],
+        "max_tokens": request["max_tokens"],
+        "system": request["system"],
+        "messages": [{"role": "user", "content": request["prompt"]}],
+    }
+    if request["model"] == "claude-fable-5":
+        options["output_config"] = {
+            "effort": os.environ.get("VOICE_OS_FABLE_EFFORT", "low"),
+        }
     response = client.messages.create(
-        model=request["model"],
-        max_tokens=request["max_tokens"],
-        system=request["system"],
-        messages=[{"role": "user", "content": request["prompt"]}],
+        **options,
     )
+    if getattr(response, "stop_reason", None) == "refusal":
+        raise ProviderRefusalError("Anthropic model refusal")
     return "".join(
         block.text for block in response.content if block.type == "text"
     ).strip()
@@ -256,6 +268,10 @@ def _route_live_completion(
     openai_model = os.environ.get("VOICE_OS_OPENAI_MODEL", "gpt-5.6-sol")
     gemini_model = os.environ.get("VOICE_OS_GEMINI_MODEL", "gemini-3.6-flash")
     xai_model = os.environ.get("VOICE_OS_XAI_MODEL", "grok-4.5")
+    anthropic_fallback_model = os.environ.get(
+        "VOICE_OS_ANTHROPIC_FALLBACK_MODEL",
+        "claude-opus-4-8",
+    )
     allowed_providers = {
         value.strip()
         for value in os.environ.get(
@@ -265,6 +281,13 @@ def _route_live_completion(
         if value.strip()
     }
     candidates = [(DEFAULT_PROVIDER, DEFAULT_MODEL)]
+    if (
+        DEFAULT_PROVIDER == "anthropic"
+        and DEFAULT_MODEL != anthropic_fallback_model
+        and "anthropic" in allowed_providers
+        and os.environ.get("ANTHROPIC_API_KEY")
+    ):
+        candidates.append(("anthropic", anthropic_fallback_model))
     if (
         DEFAULT_PROVIDER != "google"
         and "google" in allowed_providers
