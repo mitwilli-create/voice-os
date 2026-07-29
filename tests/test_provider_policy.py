@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from voice_os import _last_provider_route
@@ -61,7 +63,7 @@ def test_fable_primary_is_registered_equivalent_after_voice_calibration():
 
     route = router.explain(provider="anthropic", model="claude-fable-5")
 
-    assert llm.DEFAULT_MODEL == "claude-fable-5"
+    assert llm.DEFAULT_MODEL == os.environ.get("VOICE_OS_MODEL", "claude-fable-5")
     assert route["outcome"] == "equivalent"
     assert route["calibrated"] is True
 
@@ -119,6 +121,30 @@ def test_anthropic_adapter_surfaces_fable_refusal(monkeypatch):
                 "max_tokens": 64,
             }
         )
+
+
+def test_legacy_live_path_uses_anthropic_adapter(monkeypatch):
+    calls = []
+    monkeypatch.delenv("VOICE_OS_PROVIDER_POLICY_ENABLED", raising=False)
+    monkeypatch.delenv("VOICE_OS_OFFLINE", raising=False)
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda request: calls.append(request) or "CANARY_OK",
+    )
+
+    result = llm.complete("system", "synthetic draft", max_tokens=64)
+
+    assert result == "CANARY_OK"
+    assert calls == [
+        {
+            "provider": "anthropic",
+            "model": llm.DEFAULT_MODEL,
+            "system": "system",
+            "prompt": "synthetic draft",
+            "max_tokens": 64,
+        }
+    ]
 
 
 def test_additional_voice_fallbacks_are_registered_as_degraded():

@@ -106,17 +106,16 @@ def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
             max_tokens=max_tokens,
         )
 
-    client = get_client()
-    if client is None:
-        return None
     try:
-        response = client.messages.create(
-            model=DEFAULT_MODEL,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
+        return _anthropic_adapter(
+            {
+                "provider": DEFAULT_PROVIDER,
+                "model": DEFAULT_MODEL,
+                "system": system,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+            }
         )
-        return "".join(b.text for b in response.content if b.type == "text").strip()
     except Exception as exc:
         _warn_once(f"live persona call failed ({type(exc).__name__}: {exc})")
         return None
