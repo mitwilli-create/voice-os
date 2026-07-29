@@ -69,6 +69,7 @@ def test_fable_primary_is_registered_equivalent_after_voice_calibration():
 
 
 def test_anthropic_adapter_uses_low_effort_for_fable(monkeypatch):
+    monkeypatch.setenv("VOICE_OS_FABLE_EFFORT", "low")
     captured = {}
 
     class Response:
@@ -626,6 +627,10 @@ def test_fable_failure_uses_equivalent_opus_before_cross_provider(
     monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-fable-5")
     monkeypatch.setattr(llm, "_anthropic_adapter", anthropic_adapter)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv(
+        "VOICE_OS_ANTHROPIC_FALLBACK_MODEL",
+        "claude-opus-4-8",
+    )
     monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
     monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic")
 
