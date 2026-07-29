@@ -256,13 +256,6 @@ def _route_live_completion(
     openai_model = os.environ.get("VOICE_OS_OPENAI_MODEL", "gpt-5.6-sol")
     gemini_model = os.environ.get("VOICE_OS_GEMINI_MODEL", "gemini-3.6-flash")
     xai_model = os.environ.get("VOICE_OS_XAI_MODEL", "grok-4.5")
-    candidates = [(DEFAULT_PROVIDER, DEFAULT_MODEL)]
-    if DEFAULT_PROVIDER != "openai" and os.environ.get("OPENAI_API_KEY"):
-        candidates.append(("openai", openai_model))
-    if DEFAULT_PROVIDER != "google" and os.environ.get("GEMINI_API_KEY"):
-        candidates.append(("google", gemini_model))
-    if DEFAULT_PROVIDER != "xai" and os.environ.get("XAI_API_KEY"):
-        candidates.append(("xai", xai_model))
     allowed_providers = {
         value.strip()
         for value in os.environ.get(
@@ -271,6 +264,25 @@ def _route_live_completion(
         ).split(",")
         if value.strip()
     }
+    candidates = [(DEFAULT_PROVIDER, DEFAULT_MODEL)]
+    if (
+        DEFAULT_PROVIDER != "google"
+        and "google" in allowed_providers
+        and os.environ.get("GEMINI_API_KEY")
+    ):
+        candidates.append(("google", gemini_model))
+    if (
+        DEFAULT_PROVIDER != "openai"
+        and "openai" in allowed_providers
+        and os.environ.get("OPENAI_API_KEY")
+    ):
+        candidates.append(("openai", openai_model))
+    if (
+        DEFAULT_PROVIDER != "xai"
+        and "xai" in allowed_providers
+        and os.environ.get("XAI_API_KEY")
+    ):
+        candidates.append(("xai", xai_model))
     allow_degraded = os.environ.get(
         "VOICE_OS_ALLOW_DEGRADED",
         "",

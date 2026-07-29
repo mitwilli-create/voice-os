@@ -496,7 +496,7 @@ def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
     assert result.fallback_reason == "provider_rate_quota"
     assert calls == ["anthropic", "openai"]
 
-def test_live_completion_exhausts_ranked_fallbacks_until_google_succeeds(
+def test_live_completion_prefers_google_then_uses_openai_if_unavailable(
     monkeypatch,
 ):
     calls = []
@@ -517,14 +517,14 @@ def test_live_completion_exhausts_ranked_fallbacks_until_google_succeeds(
     )
     monkeypatch.setattr(
         llm,
-        "_openai_adapter",
-        lambda _request: calls.append("openai")
+        "_google_adapter",
+        lambda _request: calls.append("google")
         or (_ for _ in ()).throw(UnavailableError("service unavailable")),
     )
     monkeypatch.setattr(
         llm,
-        "_google_adapter",
-        lambda _request: calls.append("google") or "CANARY_OK",
+        "_openai_adapter",
+        lambda _request: calls.append("openai") or "CANARY_OK",
         raising=False,
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
@@ -545,11 +545,52 @@ def test_live_completion_exhausts_ranked_fallbacks_until_google_succeeds(
     )
 
     assert result == "CANARY_OK"
-    assert result.provider == "google"
-    assert result.model == "gemini-3.6-flash"
+    assert result.provider == "openai"
+    assert result.model == "gpt-5.6-sol"
     assert result.policy_outcome == "degraded"
     assert result.fallback_reason == "provider_unavailable"
-    assert calls == ["anthropic", "openai", "google"]
+    assert calls == ["anthropic", "google", "openai"]
+
+
+def test_live_completion_omits_credentialed_but_disallowed_provider(monkeypatch):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic")
+        or (_ for _ in ()).throw(CapacityError("usage limit reached")),
+    )
+    monkeypatch.setattr(
+        llm,
+        "_openai_adapter",
+        lambda _request: calls.append("openai") or "WRONG_PROVIDER",
+    )
+    monkeypatch.setattr(
+        llm,
+        "_google_adapter",
+        lambda _request: calls.append("google") or "CANARY_OK",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("OPENAI_API_KEY", "present")
+    monkeypatch.setenv("GEMINI_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic,google")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "google"
+    assert calls == ["anthropic", "google"]
 
 
 def test_explain_is_deterministic_and_calls_no_adapter():
