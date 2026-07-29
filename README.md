@@ -31,6 +31,7 @@ cd voice-os
 # The pipeline runs deterministically offline without it.
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=your_key_here
+export VOICE_OS_PROVIDER_POLICY_ENABLED=true
 
 # Run a scoring pass against the sample corpus
 python score.py --corpus data/sample_corpus.txt --draft data/sample_draft.txt
@@ -104,9 +105,9 @@ Shipped and measured: the callable layer (`voice_os.draft()`), the extended cont
 
 The personal corpus itself (chunk stores under `corpus/`, raw exports under `sources/`, mined artifacts, KB snapshots) is local-only and gitignored; layered privacy gates (gitignore plus pre-commit and pre-push hooks, active once a clone enables them via `git config core.hooksPath .githooks`) keep personal data out of the repo. Sample data in `data/` is synthetic but structurally representative, and the whole test suite runs against it.
 
-Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key; with credentials, the generative and adversarial personas run on Claude.
+Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key. With credentials, the generative and adversarial personas use only a provider and model pair that has an explicit independent calibration entry. The initial calibrated route is Anthropic Claude Opus 4.8. An uncalibrated alternate hard-stops before draft or exemplar text is sent.
 
-**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the Anthropic API. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. Checkpoints contain draft and exemplar text; they live under the gitignored `var/` directory by default, or wherever `var_dir` / `VOICE_OS_VAR_DIR` points, so keep overrides outside tracked paths.
+**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the selected calibrated provider. `VOICE_OS_PROVIDER_POLICY_ENABLED=true` enables the policy path. `VOICE_OS_PROVIDER` and `VOICE_OS_MODEL` select the requested route, but selection never overrides the calibration gate. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. This privacy override runs before client caches and routing. Live envelopes and checkpoints stamp provider, model, and policy outcome. Checkpoints contain draft and exemplar text; they live under the gitignored `var/` directory by default, or wherever `var_dir` / `VOICE_OS_VAR_DIR` points, so keep overrides outside tracked paths.
 
 Tests: `python -m pytest tests/` runs the full suite (offline, no API key needed). The core scoring tests also run dependency-free via `python -m unittest discover -s tests -v`.
 
