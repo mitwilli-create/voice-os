@@ -57,9 +57,6 @@ _CREDENTIAL_KEYS = {
     "xai": ("XAI_API_KEY",),
 }
 
-_RETRYABLE_FALLBACK_KINDS = {"rate_quota", "timeout", "unavailable"}
-
-
 def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
     status = getattr(exc, "status_code", None)
     if status is None:
@@ -230,7 +227,7 @@ class ProviderPolicyRouter:
                 )
             except ProviderPolicyHardStop as exc:
                 last_error = exc
-                if exc.kind not in _RETRYABLE_FALLBACK_KINDS:
+                if not exc.retryable:
                     raise
                 fallback_reason = f"provider_{exc.kind}"
         if last_error is not None:
