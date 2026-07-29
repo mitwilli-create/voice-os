@@ -105,6 +105,9 @@ class PersonaResult:
     text: str
     notes: list[str]
     mode: str  # "live" or "offline"
+    provider: str | None = None
+    model: str | None = None
+    policy_outcome: str | None = None
 
 
 class GenerativePersona:
@@ -132,6 +135,9 @@ class GenerativePersona:
                 text=scrub_em_dashes(revised),
                 notes=["revised by Claude"],
                 mode="live",
+                provider=getattr(revised, "provider", "anthropic"),
+                model=getattr(revised, "model", llm.DEFAULT_MODEL),
+                policy_outcome=getattr(revised, "policy_outcome", None),
             )
         return self._offline_revise(draft, target, banned)
 
@@ -182,7 +188,14 @@ class AdversarialPersona:
         if critique is not None:
             findings = [] if critique.strip().upper().startswith("PASS") else \
                 [line.strip("- ").strip() for line in critique.splitlines() if line.strip()]
-            return PersonaResult(text=text, notes=findings, mode="live")
+            return PersonaResult(
+                text=text,
+                notes=findings,
+                mode="live",
+                provider=getattr(critique, "provider", "anthropic"),
+                model=getattr(critique, "model", llm.DEFAULT_MODEL),
+                policy_outcome=getattr(critique, "policy_outcome", None),
+            )
 
         findings = [f"banned phrase survived revision: '{p}'"
                     for p in find_banned(text, banned)]

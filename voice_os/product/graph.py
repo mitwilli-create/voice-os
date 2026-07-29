@@ -32,7 +32,7 @@ from .. import llm
 from .. import moves
 from ..axes import AxisProfile, score_text
 from ..model import VoiceModel
-from ..personas import AdversarialPersona, GenerativePersona
+from ..personas import AdversarialPersona, GenerativePersona, PersonaResult
 from ..qa import find_banned, gate_extended
 from ..tone import ToneProfile, derive_metrics, tone_signals
 from . import kb as kb_module
@@ -148,7 +148,7 @@ def _corpus_identity(path: str) -> dict:
     return identity
 
 
-def _stamp_live_model(state: VoiceState, mode: str) -> dict:
+def _stamp_live_model(state: VoiceState, result: PersonaResult) -> dict:
     """Provenance update recording the engine that served a live call.
 
     Records the resolved model id (VOICE_OS_MODEL / DEFAULT_MODEL) the
@@ -158,10 +158,15 @@ def _stamp_live_model(state: VoiceState, mode: str) -> dict:
     live_model None. Returns {} when there is nothing to record so
     callers can splat it into their partial state update.
     """
-    if mode != "live":
+    if result.mode != "live":
         return {}
     provenance = dict(state.get("provenance", {}))
-    provenance["live_model"] = llm.DEFAULT_MODEL
+    provenance["live_model"] = result.model or llm.DEFAULT_MODEL
+    provenance["provider"] = result.provider or llm.DEFAULT_PROVIDER
+    provenance["model"] = result.model or llm.DEFAULT_MODEL
+    provenance.pop("policy_outcome", None)
+    if result.policy_outcome:
+        provenance["policy_outcome"] = result.policy_outcome
     return {"provenance": provenance}
 
 
@@ -419,7 +424,7 @@ def generate(state: VoiceState) -> dict:
     return {
         "current_draft": text,
         "persona_modes": _merge_modes(state, result.mode),
-        **_stamp_live_model(state, result.mode),
+        **_stamp_live_model(state, result),
         "trace_notes": notes,
     }
 
@@ -433,7 +438,7 @@ def critique(state: VoiceState) -> dict:
     return {
         "critique_feedback": "\n".join(result.notes),
         "persona_modes": _merge_modes(state, result.mode),
-        **_stamp_live_model(state, result.mode),
+        **_stamp_live_model(state, result),
         "trace_notes": [
             f"critique: {len(result.notes)} findings (mode={result.mode})"
         ],
@@ -618,7 +623,7 @@ def revise(state: VoiceState) -> dict:
         "revision_count": state["revision_count"] + 1,
         "revision_history": [state["current_draft"]],
         "persona_modes": _merge_modes(state, result.mode),
-        **_stamp_live_model(state, result.mode),
+        **_stamp_live_model(state, result),
         "trace_notes": notes,
     }
 

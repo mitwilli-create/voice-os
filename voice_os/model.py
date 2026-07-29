@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from . import __version__, load_corpus, run_cycles
+from . import __version__, _last_provider_route, load_corpus, run_cycles
 from .axes import AxisProfile, score_text
 from .calibration import calibrate_extended
 from .contexts import VoiceContext
@@ -144,15 +144,14 @@ class VoiceModel:
             extra_signals=q.guidance, tone_profile=q.tone,
         )
         live = "live" in modes
-        if live:
-            from .llm import DEFAULT_MODEL
+        live_route = _last_provider_route(cycles)
         return {
             "meta": {
                 **q.meta,
                 "mode": "live" if live else "offline",
                 # Engine stamp on live runs only; offline output is
                 # unchanged (docs/determinism.md hardening item 3).
-                **({"model": DEFAULT_MODEL} if live else {}),
+                **(dict(live_route) if live_route else {}),
             },
             "classification": q.context,
             "sources": q.sources,

@@ -106,9 +106,21 @@ def run_cycles(
         revision = generative.revise(text, target, banned, signals)
         critique = adversarial.critique(revision.text, target, banned)
         modes.update({revision.mode, critique.mode})
+        live_routes = []
+        for persona_result in (revision, critique):
+            if persona_result.mode == "live":
+                route = {
+                    "provider": persona_result.provider,
+                    "model": persona_result.model,
+                }
+                if persona_result.policy_outcome:
+                    route["policy_outcome"] = persona_result.policy_outcome
+                live_routes.append(route)
         carried_findings = critique.notes
         record["generative_notes"] = revision.notes
         record["adversarial_findings"] = critique.notes
+        if live_routes:
+            record["provider_routes"] = live_routes
         cycles.append(record)
         text = revision.text
 
@@ -118,6 +130,15 @@ def run_cycles(
     # invariant of this function rather than a property every mutation
     # path must individually preserve.
     return cycles, result, scrub_em_dashes(text), modes
+
+
+def _last_provider_route(cycles: list[dict]) -> dict | None:
+    routes = [
+        route
+        for cycle in cycles
+        for route in cycle.get("provider_routes", [])
+    ]
+    return dict(routes[-1]) if routes else None
 
 
 def run_pipeline(
@@ -167,8 +188,7 @@ def run_pipeline(
     )
 
     live = "live" in modes
-    if live:
-        from .llm import DEFAULT_MODEL
+    live_route = _last_provider_route(cycles)
 
     return {
         "meta": {
@@ -178,7 +198,7 @@ def run_pipeline(
             # Engine stamp appears only on live runs, so the offline
             # default output stays byte-identical to the golden lock
             # (docs/determinism.md hardening item 3).
-            **({"model": DEFAULT_MODEL} if live else {}),
+            **(dict(live_route) if live_route else {}),
         },
         "classification": {
             "channel": channel,
