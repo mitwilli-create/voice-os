@@ -81,11 +81,12 @@ class ProviderPolicyRouter:
                 "credential_present": credential_present,
                 "adapter_present": provider in self.adapters,
             }
+        reason = "hard_stopped" if route.outcome == "hard_stop" else "eligible"
         return {
             "provider": provider,
             "model": model,
             "outcome": route.outcome,
-            "reason": "eligible",
+            "reason": reason,
             "calibrated": True,
             "credential_present": credential_present,
             "adapter_present": provider in self.adapters,

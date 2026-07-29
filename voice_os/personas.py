@@ -135,7 +135,7 @@ class GenerativePersona:
                 text=scrub_em_dashes(revised),
                 notes=["revised by Claude"],
                 mode="live",
-                provider=getattr(revised, "provider", llm.DEFAULT_PROVIDER),
+                provider=getattr(revised, "provider", "anthropic"),
                 model=getattr(revised, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(
                     revised, "policy_outcome", "equivalent"
@@ -194,7 +194,7 @@ class AdversarialPersona:
                 text=text,
                 notes=findings,
                 mode="live",
-                provider=getattr(critique, "provider", llm.DEFAULT_PROVIDER),
+                provider=getattr(critique, "provider", "anthropic"),
                 model=getattr(critique, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(
                     critique, "policy_outcome", "equivalent"

@@ -52,6 +52,21 @@ def test_default_calibrated_route_is_equivalent():
     assert len(calls) == 1
 
 
+def test_registered_hard_stop_explains_that_it_is_blocked():
+    route = ProviderRoute(
+        provider="anthropic",
+        model="blocked-model",
+        outcome="hard_stop",
+    )
+    router = ProviderPolicyRouter(
+        adapters={},
+        registry={("anthropic", "blocked-model"): route},
+    )
+    plan = router.explain(provider="anthropic", model="blocked-model")
+    assert plan["outcome"] == "hard_stop"
+    assert plan["reason"] == "hard_stopped"
+
+
 def test_uncalibrated_alternate_hard_stops_before_adapter_call():
     calls = []
     router = ProviderPolicyRouter(
@@ -175,6 +190,29 @@ def test_llm_routed_text_provenance_reaches_persona(monkeypatch):
     assert result.provider == "anthropic"
     assert result.model == "claude-opus-4-8"
     assert result.policy_outcome == "equivalent"
+
+
+def test_legacy_plain_text_completion_records_actual_anthropic_provider(
+    monkeypatch,
+):
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "openai")
+    monkeypatch.setattr(
+        llm,
+        "complete",
+        lambda *args, **kwargs: "Legacy Anthropic result.",
+    )
+    target = {
+        "rhetorical_pace": 0.5,
+        "risk_tolerance": 0.5,
+        "sentence_rhythm": 0.5,
+        "escalation_pattern": 0.5,
+        "hedging_behavior": 0.5,
+        "editorial_register": 0.5,
+    }
+
+    result = GenerativePersona().revise("Draft.", target, [], [])
+
+    assert result.provider == "anthropic"
 
 
 def test_live_route_stamps_checkpoint_provenance():
