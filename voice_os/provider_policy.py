@@ -38,6 +38,11 @@ class ProviderPolicyHardStop(RuntimeError):
 
 
 CALIBRATED_ROUTES = {
+    ("anthropic", "claude-fable-5"): ProviderRoute(
+        provider="anthropic",
+        model="claude-fable-5",
+        outcome="equivalent",
+    ),
     ("anthropic", "claude-opus-4-8"): ProviderRoute(
         provider="anthropic",
         model="claude-opus-4-8",
@@ -75,6 +80,8 @@ def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
         response = getattr(exc, "response", None)
         status = getattr(response, "status_code", None)
     signal = f"{type(exc).__name__} {exc}".lower()
+    if "refusal" in signal or "refused" in signal:
+        return "refusal", True
     if (
         status in {402, 429}
         or "usage limit" in signal

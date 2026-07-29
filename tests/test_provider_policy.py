@@ -52,6 +52,75 @@ def test_default_calibrated_route_is_equivalent():
     )
     assert len(calls) == 1
 
+
+def test_fable_primary_is_registered_equivalent_after_voice_calibration():
+    router = ProviderPolicyRouter(
+        adapters={},
+        env={"ANTHROPIC_API_KEY": "present"},
+    )
+
+    route = router.explain(provider="anthropic", model="claude-fable-5")
+
+    assert llm.DEFAULT_MODEL == "claude-fable-5"
+    assert route["outcome"] == "equivalent"
+    assert route["calibrated"] is True
+
+
+def test_anthropic_adapter_uses_low_effort_for_fable(monkeypatch):
+    captured = {}
+
+    class Response:
+        stop_reason = "end_turn"
+        content = [type("Block", (), {"type": "text", "text": "CANARY_OK"})()]
+
+    class Messages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return Response()
+
+    class Client:
+        messages = Messages()
+
+    monkeypatch.setattr(llm, "get_client", lambda: Client())
+
+    result = llm._anthropic_adapter(
+        {
+            "model": "claude-fable-5",
+            "system": "system",
+            "prompt": "synthetic draft",
+            "max_tokens": 64,
+        }
+    )
+
+    assert result == "CANARY_OK"
+    assert captured["output_config"] == {"effort": "low"}
+
+
+def test_anthropic_adapter_surfaces_fable_refusal(monkeypatch):
+    class Response:
+        stop_reason = "refusal"
+        content = []
+
+    class Messages:
+        def create(self, **_kwargs):
+            return Response()
+
+    class Client:
+        messages = Messages()
+
+    monkeypatch.setattr(llm, "get_client", lambda: Client())
+
+    with pytest.raises(llm.ProviderRefusalError):
+        llm._anthropic_adapter(
+            {
+                "model": "claude-fable-5",
+                "system": "system",
+                "prompt": "synthetic draft",
+                "max_tokens": 64,
+            }
+        )
+
+
 def test_additional_voice_fallbacks_are_registered_as_degraded():
     router = ProviderPolicyRouter(
         adapters={},
@@ -495,6 +564,58 @@ def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
     assert result.policy_outcome == "degraded"
     assert result.fallback_reason == "provider_rate_quota"
     assert calls == ["anthropic", "openai"]
+
+
+@pytest.mark.parametrize(
+    ("failure", "fallback_reason"),
+    [
+        (
+            type(
+                "CapacityError",
+                (RuntimeError,),
+                {"status_code": 429},
+            )("usage limit reached"),
+            "provider_rate_quota",
+        ),
+        (
+            llm.ProviderRefusalError("Fable refused the request"),
+            "provider_refusal",
+        ),
+    ],
+)
+def test_fable_failure_uses_equivalent_opus_before_cross_provider(
+    monkeypatch,
+    failure,
+    fallback_reason,
+):
+    calls = []
+
+    def anthropic_adapter(request):
+        calls.append(request["model"])
+        if request["model"] == "claude-fable-5":
+            raise failure
+        return "CANARY_OK"
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-fable-5")
+    monkeypatch.setattr(llm, "_anthropic_adapter", anthropic_adapter)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "anthropic"
+    assert result.model == "claude-opus-4-8"
+    assert result.policy_outcome == "equivalent"
+    assert result.fallback_reason == fallback_reason
+    assert calls == ["claude-fable-5", "claude-opus-4-8"]
+
 
 def test_live_completion_prefers_google_then_uses_openai_if_unavailable(
     monkeypatch,
