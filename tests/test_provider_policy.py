@@ -7,6 +7,7 @@ from voice_os import llm
 from voice_os.personas import GenerativePersona, PersonaResult
 from voice_os.product.graph import _stamp_live_model
 from voice_os.provider_policy import (
+    CompletionResult,
     ProviderPolicyHardStop,
     ProviderPolicyRouter,
     ProviderRoute,
@@ -153,6 +154,170 @@ def test_provider_failure_never_silently_becomes_offline():
             max_tokens=100,
         )
 
+def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def anthropic(_request):
+        calls.append("anthropic")
+        raise CapacityError("usage limit reached")
+
+    def openai(_request):
+        calls.append("openai")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"anthropic": anthropic, "openai": openai},
+        env={
+            "ANTHROPIC_API_KEY": "present",
+            "OPENAI_API_KEY": "present",
+        },
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("anthropic", "claude-opus-4-8"),
+            ("openai", "gpt-5.6-sol"),
+        ],
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allow_degraded=True,
+        allowed_providers={"anthropic", "openai"},
+    )
+
+    assert result == CompletionResult(
+        text="CANARY_OK",
+        route=ProviderRoute(
+            provider="openai",
+            model="gpt-5.6-sol",
+            outcome="degraded",
+        ),
+        fallback_reason="provider_rate_quota",
+    )
+    assert calls == ["anthropic", "openai"]
+
+
+def test_degraded_fallback_requires_flag_and_provider_allowlist():
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    router = ProviderPolicyRouter(
+        adapters={
+            "anthropic": lambda _request: (_ for _ in ()).throw(
+                CapacityError("usage limit reached")
+            ),
+            "openai": lambda request: calls.append(request) or "CANARY_OK",
+        },
+        env={
+            "ANTHROPIC_API_KEY": "present",
+            "OPENAI_API_KEY": "present",
+        },
+    )
+    candidates = [
+        ("anthropic", "claude-opus-4-8"),
+        ("openai", "gpt-5.6-sol"),
+    ]
+
+    with pytest.raises(ProviderPolicyHardStop):
+        router.route_candidates(
+            candidates=candidates,
+            system="system",
+            prompt="synthetic draft",
+            max_tokens=16,
+            allow_degraded=False,
+            allowed_providers={"anthropic", "openai"},
+        )
+    with pytest.raises(ProviderPolicyHardStop):
+        router.route_candidates(
+            candidates=candidates,
+            system="system",
+            prompt="synthetic draft",
+            max_tokens=16,
+            allow_degraded=True,
+            allowed_providers={"anthropic"},
+        )
+    assert calls == []
+
+
+def test_invalid_request_does_not_cross_provider_fallback():
+    calls = []
+
+    class InvalidRequestError(RuntimeError):
+        status_code = 400
+
+    router = ProviderPolicyRouter(
+        adapters={
+            "anthropic": lambda _request: (_ for _ in ()).throw(
+                InvalidRequestError("invalid request")
+            ),
+            "openai": lambda request: calls.append(request) or "CANARY_OK",
+        },
+        env={
+            "ANTHROPIC_API_KEY": "present",
+            "OPENAI_API_KEY": "present",
+        },
+    )
+
+    with pytest.raises(ProviderPolicyHardStop, match="provider_invalid_request"):
+        router.route_candidates(
+            candidates=[
+                ("anthropic", "claude-opus-4-8"),
+                ("openai", "gpt-5.6-sol"),
+            ],
+            system="system",
+            prompt="synthetic draft",
+            max_tokens=16,
+            allow_degraded=True,
+            allowed_providers={"anthropic", "openai"},
+        )
+    assert calls == []
+
+def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
+    monkeypatch,
+):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic")
+        or (_ for _ in ()).throw(CapacityError("usage limit reached")),
+    )
+    monkeypatch.setattr(
+        llm,
+        "_openai_adapter",
+        lambda _request: calls.append("openai") or "CANARY_OK",
+        raising=False,
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("OPENAI_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic,openai")
+    monkeypatch.setenv("VOICE_OS_OPENAI_MODEL", "gpt-5.6-sol")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "openai"
+    assert result.model == "gpt-5.6-sol"
+    assert result.policy_outcome == "degraded"
+    assert result.fallback_reason == "provider_rate_quota"
+    assert calls == ["anthropic", "openai"]
+
 
 def test_explain_is_deterministic_and_calls_no_adapter():
     calls = []
@@ -222,19 +387,21 @@ def test_live_route_stamps_checkpoint_provenance():
         text="Draft.",
         notes=[],
         mode="live",
-        provider="anthropic",
-        model="claude-opus-4-8",
-        policy_outcome="equivalent",
+        provider="openai",
+        model="gpt-5.6-sol",
+        policy_outcome="degraded",
+        fallback_reason="provider_rate_quota",
     )
 
     update = _stamp_live_model(state, result)
 
     assert update["provenance"] == {
         "voice_os_version": "test",
-        "live_model": "claude-opus-4-8",
-        "provider": "anthropic",
-        "model": "claude-opus-4-8",
-        "policy_outcome": "equivalent",
+        "live_model": "gpt-5.6-sol",
+        "provider": "openai",
+        "model": "gpt-5.6-sol",
+        "policy_outcome": "degraded",
+        "fallback_reason": "provider_rate_quota",
     }
 
 
