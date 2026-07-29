@@ -145,6 +145,7 @@ def _openai_adapter(request: dict) -> str:
         json={
             "model": request["model"],
             "max_output_tokens": request["max_tokens"],
+            "store": False,
             "input": [
                 {"role": "system", "content": request["system"]},
                 {"role": "user", "content": request["prompt"]},
@@ -164,6 +165,80 @@ def _openai_adapter(request: dict) -> str:
                 parts.append(content.get("text", ""))
     return "".join(parts).strip()
 
+def _google_adapter(request: dict) -> str:
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError("Google credentials unavailable")
+    response = httpx.post(
+        (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{request['model']}:generateContent"
+        ),
+        params={"key": key},
+        headers={"Content-Type": "application/json"},
+        json={
+            "system_instruction": {
+                "parts": [{"text": request["system"]}],
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": request["prompt"]}],
+                }
+            ],
+            "generationConfig": {
+                "maxOutputTokens": request["max_tokens"],
+                "thinkingConfig": {
+                    "thinkingLevel": "minimal",
+                },
+            },
+        },
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return "".join(
+        part.get("text", "")
+        for candidate in payload.get("candidates", [])
+        for part in candidate.get("content", {}).get("parts", [])
+        if isinstance(part.get("text"), str) and part.get("thought") is not True
+    ).strip()
+
+
+def _xai_adapter(request: dict) -> str:
+    key = os.environ.get("XAI_API_KEY")
+    if not key:
+        raise RuntimeError("xAI credentials unavailable")
+    response = httpx.post(
+        "https://api.x.ai/v1/responses",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": request["model"],
+            "max_output_tokens": request["max_tokens"],
+            "store": False,
+            "reasoning": {"effort": "low"},
+            "input": [
+                {"role": "system", "content": request["system"]},
+                {"role": "user", "content": request["prompt"]},
+            ],
+        },
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    direct = payload.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    return "".join(
+        content.get("text", "")
+        for item in payload.get("output", [])
+        for content in item.get("content", [])
+        if content.get("type") == "output_text"
+    ).strip()
+
 
 def _route_live_completion(
     *, system: str, prompt: str, max_tokens: int
@@ -174,12 +249,20 @@ def _route_live_completion(
         adapters={
             "anthropic": _anthropic_adapter,
             "openai": _openai_adapter,
+            "google": _google_adapter,
+            "xai": _xai_adapter,
         },
     )
     openai_model = os.environ.get("VOICE_OS_OPENAI_MODEL", "gpt-5.6-sol")
+    gemini_model = os.environ.get("VOICE_OS_GEMINI_MODEL", "gemini-3.6-flash")
+    xai_model = os.environ.get("VOICE_OS_XAI_MODEL", "grok-4.5")
     candidates = [(DEFAULT_PROVIDER, DEFAULT_MODEL)]
-    if DEFAULT_PROVIDER != "openai":
+    if DEFAULT_PROVIDER != "openai" and os.environ.get("OPENAI_API_KEY"):
         candidates.append(("openai", openai_model))
+    if DEFAULT_PROVIDER != "google" and os.environ.get("GEMINI_API_KEY"):
+        candidates.append(("google", gemini_model))
+    if DEFAULT_PROVIDER != "xai" and os.environ.get("XAI_API_KEY"):
+        candidates.append(("xai", xai_model))
     allowed_providers = {
         value.strip()
         for value in os.environ.get(

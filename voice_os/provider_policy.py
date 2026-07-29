@@ -48,6 +48,16 @@ CALIBRATED_ROUTES = {
         model="gpt-5.6-sol",
         outcome="degraded",
     ),
+    ("google", "gemini-3.6-flash"): ProviderRoute(
+        provider="google",
+        model="gemini-3.6-flash",
+        outcome="degraded",
+    ),
+    ("xai", "grok-4.5"): ProviderRoute(
+        provider="xai",
+        model="grok-4.5",
+        outcome="degraded",
+    ),
 }
 
 _CREDENTIAL_KEYS = {
@@ -61,6 +71,9 @@ def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
     status = getattr(exc, "status_code", None)
     if status is None:
         status = getattr(exc, "status", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
     signal = f"{type(exc).__name__} {exc}".lower()
     if (
         status in {402, 429}
@@ -191,6 +204,7 @@ class ProviderPolicyRouter:
             raise ProviderPolicyHardStop(
                 "provider_malformed_response",
                 kind="malformed_response",
+                retryable=True,
             )
         route = self.registry[(provider, model)]
         return CompletionResult(text=text.strip(), route=route)

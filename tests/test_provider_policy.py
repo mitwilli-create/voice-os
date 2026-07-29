@@ -52,6 +52,111 @@ def test_default_calibrated_route_is_equivalent():
     )
     assert len(calls) == 1
 
+def test_additional_voice_fallbacks_are_registered_as_degraded():
+    router = ProviderPolicyRouter(
+        adapters={},
+        env={
+            "GEMINI_API_KEY": "present",
+            "XAI_API_KEY": "present",
+        },
+    )
+    google = router.explain(provider="google", model="gemini-3.6-flash")
+    xai = router.explain(provider="xai", model="grok-4.5")
+    assert google["outcome"] == "degraded"
+    assert google["calibrated"] is True
+    assert xai["outcome"] == "degraded"
+    assert xai["calibrated"] is True
+
+
+def test_google_adapter_excludes_thought_summary_and_requests_minimal_thinking(
+    monkeypatch,
+):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "internal summary", "thought": True},
+                                {"text": "CANARY_OK"},
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    def post(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "present")
+    monkeypatch.setattr(llm.httpx, "post", post)
+
+    result = llm._google_adapter(
+        {
+            "model": "gemini-3.6-flash",
+            "system": "system",
+            "prompt": "synthetic draft",
+            "max_tokens": 64,
+        }
+    )
+
+    assert result == "CANARY_OK"
+    assert captured["json"]["generationConfig"]["thinkingConfig"] == {
+        "thinkingLevel": "minimal"
+    }
+
+
+@pytest.mark.parametrize(
+    ("adapter_name", "credential_key", "model"),
+    [
+        ("_openai_adapter", "OPENAI_API_KEY", "gpt-5.6-sol"),
+        ("_xai_adapter", "XAI_API_KEY", "grok-4.5"),
+    ],
+)
+def test_responses_adapters_disable_storage_and_minimize_reasoning(
+    monkeypatch,
+    adapter_name,
+    credential_key,
+    model,
+):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"output_text": "CANARY_OK"}
+
+    def post(_url, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setenv(credential_key, "present")
+    monkeypatch.setattr(llm.httpx, "post", post)
+
+    result = getattr(llm, adapter_name)(
+        {
+            "model": model,
+            "system": "system",
+            "prompt": "synthetic draft",
+            "max_tokens": 64,
+        }
+    )
+
+    assert result == "CANARY_OK"
+    assert captured["json"]["store"] is False
+    if adapter_name == "_xai_adapter":
+        assert captured["json"]["reasoning"] == {"effort": "low"}
+
 
 def test_registered_hard_stop_explains_that_it_is_blocked():
     route = ProviderRoute(
@@ -277,6 +382,79 @@ def test_invalid_request_does_not_cross_provider_fallback():
         )
     assert calls == []
 
+
+@pytest.mark.parametrize("status_code", [429, 500])
+def test_httpx_retryable_status_uses_next_provider(status_code):
+    calls = []
+
+    def openai(_request):
+        calls.append("openai")
+        request = llm.httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = llm.httpx.Response(status_code, request=request)
+        raise llm.httpx.HTTPStatusError(
+            "provider failure",
+            request=request,
+            response=response,
+        )
+
+    router = ProviderPolicyRouter(
+        adapters={
+            "openai": openai,
+            "google": lambda _request: calls.append("google") or "CANARY_OK",
+        },
+        env={
+            "OPENAI_API_KEY": "present",
+            "GEMINI_API_KEY": "present",
+        },
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("openai", "gpt-5.6-sol"),
+            ("google", "gemini-3.6-flash"),
+        ],
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allow_degraded=True,
+        allowed_providers={"openai", "google"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.route.provider == "google"
+    assert calls == ["openai", "google"]
+
+
+def test_empty_provider_output_uses_next_allowed_provider():
+    calls = []
+    router = ProviderPolicyRouter(
+        adapters={
+            "openai": lambda _request: calls.append("openai") or "",
+            "google": lambda _request: calls.append("google") or "CANARY_OK",
+        },
+        env={
+            "OPENAI_API_KEY": "present",
+            "GEMINI_API_KEY": "present",
+        },
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("openai", "gpt-5.6-sol"),
+            ("google", "gemini-3.6-flash"),
+        ],
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allow_degraded=True,
+        allowed_providers={"openai", "google"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.fallback_reason == "provider_malformed_response"
+    assert calls == ["openai", "google"]
+
+
 def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
     monkeypatch,
 ):
@@ -317,6 +495,61 @@ def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
     assert result.policy_outcome == "degraded"
     assert result.fallback_reason == "provider_rate_quota"
     assert calls == ["anthropic", "openai"]
+
+def test_live_completion_exhausts_ranked_fallbacks_until_google_succeeds(
+    monkeypatch,
+):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    class UnavailableError(RuntimeError):
+        status_code = 503
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic")
+        or (_ for _ in ()).throw(CapacityError("usage limit reached")),
+    )
+    monkeypatch.setattr(
+        llm,
+        "_openai_adapter",
+        lambda _request: calls.append("openai")
+        or (_ for _ in ()).throw(UnavailableError("service unavailable")),
+    )
+    monkeypatch.setattr(
+        llm,
+        "_google_adapter",
+        lambda _request: calls.append("google") or "CANARY_OK",
+        raising=False,
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("OPENAI_API_KEY", "present")
+    monkeypatch.setenv("GEMINI_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.setenv(
+        "VOICE_OS_ALLOWED_PROVIDERS",
+        "anthropic,openai,google",
+    )
+    monkeypatch.setenv("VOICE_OS_OPENAI_MODEL", "gpt-5.6-sol")
+    monkeypatch.setenv("VOICE_OS_GEMINI_MODEL", "gemini-3.6-flash")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "google"
+    assert result.model == "gemini-3.6-flash"
+    assert result.policy_outcome == "degraded"
+    assert result.fallback_reason == "provider_unavailable"
+    assert calls == ["anthropic", "openai", "google"]
 
 
 def test_explain_is_deterministic_and_calls_no_adapter():
