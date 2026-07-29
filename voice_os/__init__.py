@@ -115,6 +115,8 @@ def run_cycles(
                 }
                 if persona_result.policy_outcome:
                     route["policy_outcome"] = persona_result.policy_outcome
+                if persona_result.fallback_reason:
+                    route["fallback_reason"] = persona_result.fallback_reason
                 live_routes.append(route)
         carried_findings = critique.notes
         record["generative_notes"] = revision.notes
