@@ -238,6 +238,28 @@ def test_live_route_stamps_checkpoint_provenance():
     }
 
 
+def test_unrouted_live_call_clears_stale_policy_outcome():
+    state = {
+        "provenance": {
+            "provider": "anthropic",
+            "model": "model-a",
+            "policy_outcome": "equivalent",
+        }
+    }
+    result = PersonaResult(
+        text="Draft.",
+        notes=[],
+        mode="live",
+        provider="anthropic",
+        model="model-a",
+        policy_outcome=None,
+    )
+
+    update = _stamp_live_model(state, result)
+
+    assert "policy_outcome" not in update["provenance"]
+
+
 def test_shared_pipeline_uses_the_actual_last_route():
     cycles = [
         {
