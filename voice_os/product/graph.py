@@ -164,7 +164,8 @@ def _stamp_live_model(state: VoiceState, result: PersonaResult) -> dict:
     provenance["live_model"] = result.model or llm.DEFAULT_MODEL
     provenance["provider"] = result.provider or llm.DEFAULT_PROVIDER
     provenance["model"] = result.model or llm.DEFAULT_MODEL
-    provenance["policy_outcome"] = result.policy_outcome or "equivalent"
+    if result.policy_outcome:
+        provenance["policy_outcome"] = result.policy_outcome
     return {"provenance": provenance}
 
 

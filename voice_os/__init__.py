@@ -109,13 +109,13 @@ def run_cycles(
         live_routes = []
         for persona_result in (revision, critique):
             if persona_result.mode == "live":
-                live_routes.append(
-                    {
-                        "provider": persona_result.provider,
-                        "model": persona_result.model,
-                        "policy_outcome": persona_result.policy_outcome,
-                    }
-                )
+                route = {
+                    "provider": persona_result.provider,
+                    "model": persona_result.model,
+                }
+                if persona_result.policy_outcome:
+                    route["policy_outcome"] = persona_result.policy_outcome
+                live_routes.append(route)
         carried_findings = critique.notes
         record["generative_notes"] = revision.notes
         record["adversarial_findings"] = critique.notes

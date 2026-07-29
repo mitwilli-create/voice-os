@@ -213,6 +213,7 @@ def test_legacy_plain_text_completion_records_actual_anthropic_provider(
     result = GenerativePersona().revise("Draft.", target, [], [])
 
     assert result.provider == "anthropic"
+    assert result.policy_outcome is None
 
 
 def test_live_route_stamps_checkpoint_provenance():
