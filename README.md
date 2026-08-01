@@ -122,6 +122,10 @@ the fixture-corpus golden lock runs inside the standard pytest suite;
 local baseline exists) on every push from a clone that has enabled
 hooks (`git config core.hooksPath .githooks`); and the baseline moves
 only by explicit `python3 -m voice_os.harness gate --update-baseline`.
+
+Runtime readiness for external callers: `python3 -m voice_os doctor` prints
+a JSON capability report and exits nonzero when that interpreter cannot run
+the graph-backed product layer.
 Design and honesty constraints: `docs/eval-harness.md`; measured live
 alignment history: `docs/live-alignment.md`.
 
