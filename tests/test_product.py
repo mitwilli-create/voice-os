@@ -14,6 +14,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,10 +26,86 @@ from voice_os.product.aliases import normalize_context  # noqa: E402
 from voice_os.product.state import build_result, initial_state  # noqa: E402
 from voice_os.product import fusion as fusion_module  # noqa: E402
 from voice_os.product import kb as kb_module  # noqa: E402
+from voice_os.product import cli as cli_module  # noqa: E402
+from voice_os.product import runtime as runtime_module  # noqa: E402
 
 CORPUS = str(REPO_ROOT / "data" / "sample_corpus.txt")
 BANNED = str(REPO_ROOT / "data" / "banned_list.txt")
 MINED = str(REPO_ROOT / "tests" / "fixtures" / "mined")
+
+
+def test_doctor_reports_runtime_readiness_as_json(monkeypatch, capsys):
+    """A caller must be able to reject an interpreter before sending prose."""
+    monkeypatch.setattr(
+        "voice_os.product.runtime.dependency_status",
+        lambda: {
+            "ready": False,
+            "python": "/test/python3",
+            "python_version": "3.11.0",
+            "dependencies": {
+                "langgraph": True,
+                "langgraph-checkpoint-sqlite": False,
+            },
+            "install_hint": "python -m pip install langgraph langgraph-checkpoint-sqlite",
+        },
+    )
+
+    assert cli_module.main(["doctor"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ready"] is False
+    assert payload["dependencies"] == {
+        "langgraph": True,
+        "langgraph-checkpoint-sqlite": False,
+    }
+
+
+def test_runtime_readiness_rejects_an_installed_but_broken_dependency(monkeypatch):
+    """A discoverable package whose import fails cannot execute the graph."""
+    def import_dependency(name):
+        if name == "langgraph.checkpoint.sqlite":
+            raise ImportError("sqlite adapter cannot load")
+        return SimpleNamespace(END=object(), START=object(), StateGraph=object())
+
+    monkeypatch.setattr(runtime_module, "import_module", import_dependency)
+    status = runtime_module.dependency_status()
+
+    assert status["ready"] is False
+    assert status["dependencies"]["langgraph"]["ready"] is True
+    assert status["dependencies"]["langgraph-checkpoint-sqlite"] == {
+        "ready": False,
+        "error": "ImportError: sqlite adapter cannot load",
+    }
+
+
+def test_runtime_readiness_rejects_an_unsupported_python(monkeypatch):
+    def import_dependency(name):
+        if name == "langgraph.graph":
+            return SimpleNamespace(END=object(), START=object(), StateGraph=object())
+        return SimpleNamespace(SqliteSaver=object())
+
+    monkeypatch.setattr(runtime_module, "import_module", import_dependency)
+    monkeypatch.setattr(runtime_module.sys, "version_info", (3, 9, 19))
+
+    status = runtime_module.dependency_status()
+
+    assert status["python_supported"] is False
+    assert status["ready"] is False
+
+
+def test_runtime_readiness_rejects_an_incompatible_dependency_api(monkeypatch):
+    def import_dependency(name):
+        if name == "langgraph.graph":
+            return SimpleNamespace(END=object(), START=object())
+        return SimpleNamespace(SqliteSaver=object())
+
+    monkeypatch.setattr(runtime_module, "import_module", import_dependency)
+    status = runtime_module.dependency_status()
+
+    assert status["ready"] is False
+    assert status["dependencies"]["langgraph"] == {
+        "ready": False,
+        "error": "missing runtime symbols: StateGraph",
+    }
 
 
 # ---------------------------------------------------------------- aliases

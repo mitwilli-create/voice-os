@@ -16,7 +16,7 @@ Mitchell's voice operating system: scores and calibrates drafts against his actu
 - **Honest measurement discipline:** `alignment_judged` (LLM-judged, live) is the truth metric; `alignment_offline` only gates regressions and is never reported as an approved number.
 - **No em dashes anywhere in this repo.** Banned outright.
 - **Privacy switch:** live mode sends draft text + exemplars to the Anthropic API, and live runs spend real money. Develop and test with `VOICE_OS_OFFLINE=1`; never trigger live runs (harness `run`, live `draft`) on your own initiative; Mitchell asks for them.
-- **Process:** design-first PRs. The merge gate is the Qodo review loop to Bugs(0); CodeRabbit's automatic PR review also runs, but Qodo is the blocker. Qodo Command CLI is retired, but Qodo review is not: use the Qodo IDE plugin's `/review-uncommitted` or `/review-committed` workflow for local review and the connected Qodo GitHub integration for PR review. Never treat a failed `qodo` CLI invocation as evidence that Qodo review is unavailable.
+- **Process:** design-first PRs. CodeRabbit is the required automated review gate; address all major findings and regressions before merge. Run repository tests and required checks, plus Greptile when it is installed on the PR. Qodo is not required for this repository because its integration is not connected here; do not block shipping on a Qodo review that cannot run.
 
 ## Commands
 

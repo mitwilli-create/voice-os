@@ -10,6 +10,7 @@
                               [--kb-dir PATH] [--var-dir PATH]
     python3 -m voice_os history <run_id> [--var-dir PATH]
     python3 -m voice_os graph
+    python3 -m voice_os doctor
 
 Draft text arrives on stdin by default (heredoc-friendly for shell
 callers) or from --file. The full JSON envelope prints to stdout;
@@ -19,7 +20,8 @@ normalization as voice_os.draft() applies.
 
 Exit codes for draft: 0 decision pass, 1 decision reject (envelope
 still printed with the best-effort draft), 2 usage, validation, or
-dependency error.
+dependency error. Doctor emits a JSON capability report and exits 0
+only when the selected interpreter can run graph-backed commands.
 
 Design: docs/callable-layer.md.
 """
@@ -32,6 +34,7 @@ import os
 import sys
 
 from . import describe_graph, draft, run_history
+from . import runtime
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -86,6 +89,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_history.add_argument("--var-dir", default=None)
 
     sub.add_parser("graph", help="print the compiled graph structure (mermaid)")
+    sub.add_parser(
+        "doctor",
+        help="print JSON readiness for graph-backed commands",
+    )
 
     return parser
 
@@ -159,6 +166,12 @@ def _cmd_graph() -> int:
     return 0
 
 
+def _cmd_doctor() -> int:
+    status = runtime.dependency_status()
+    _emit(json.dumps(status, indent=2))
+    return 0 if status["ready"] else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = _build_parser().parse_args(argv)
@@ -171,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_draft(args)
         if args.command == "history":
             return _cmd_history(args)
+        if args.command == "doctor":
+            return _cmd_doctor()
         return _cmd_graph()
     except (ValueError, ImportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

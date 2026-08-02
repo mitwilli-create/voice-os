@@ -250,6 +250,14 @@ EOF
 - `python3 -m voice_os history <run_id>` and
   `python3 -m voice_os graph` wrap `run_history()` and
   `describe_graph()`.
+- `python3 -m voice_os doctor` is the machine-readable readiness interface
+  for cross-process callers. It reports the exact interpreter, Python
+  version, and availability of both optional product dependencies as JSON.
+  Exit 0 means graph-backed commands are ready. Exit 2 means the caller must
+  select another interpreter or install dependencies with the report's
+  interpreter-specific `install_hint`. Callers should run this probe before
+  sending personal prose, so dependency failures cannot be mistaken for a
+  quality-gate rejection.
 - Live mode engages exactly as in the Python API: when
   `ANTHROPIC_API_KEY` resolves in the environment and
   `VOICE_OS_OFFLINE` is unset. Callers that need live drafting should
