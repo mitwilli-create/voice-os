@@ -6,6 +6,7 @@ import pytest
 
 from voice_os import _last_provider_route
 from voice_os import llm
+from voice_os import subscription_cli
 from voice_os.personas import GenerativePersona, PersonaResult
 from voice_os.product.graph import _stamp_live_model
 from voice_os.provider_policy import (
@@ -875,3 +876,196 @@ def test_shared_pipeline_uses_the_actual_last_route():
         "model": "model-b",
         "policy_outcome": "degraded",
     }
+
+
+# --- Subscription-first billing (VOICE_OS_SUBSCRIPTION_FIRST) -------------
+#
+# This is a BILLING mechanism layered on top of the policy router: it must
+# never change which provider or model wins, only whether that provider's
+# call is paid for via a CLI subscription or a metered API key. Every test
+# below asserts provider/model selection is unchanged and only billing_route
+# differs.
+
+
+def test_subscription_preferred_by_default_never_calls_api_adapter(monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        subscription_cli,
+        "anthropic_subscription_complete",
+        lambda _request: calls.append("anthropic_subscription") or "CANARY_OK",
+    )
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic_api") or "WRONG_ROUTE",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", "1")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "anthropic"
+    assert result.model == "claude-opus-4-8"
+    assert result.billing_route == "subscription"
+    assert calls == ["anthropic_subscription"]
+
+
+def test_subscription_unavailable_falls_back_to_same_provider_api_key(monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+
+    def subscription_unavailable(_request):
+        calls.append("anthropic_subscription")
+        raise subscription_cli.SubscriptionUnavailable("claude CLI not on PATH")
+
+    monkeypatch.setattr(
+        subscription_cli, "anthropic_subscription_complete", subscription_unavailable
+    )
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic_api") or "CANARY_OK",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", "1")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "anthropic"
+    assert result.model == "claude-opus-4-8"
+    assert result.billing_route == "api_key"
+    # Provider selection and cross-provider fallback are untouched: this
+    # never surfaces as a router-level ProviderPolicyHardStop or retry
+    # against a different provider, only a same-provider billing demotion.
+    assert calls == ["anthropic_subscription", "anthropic_api"]
+
+
+def test_kill_switch_forces_api_only_never_tries_subscription(monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        subscription_cli,
+        "anthropic_subscription_complete",
+        lambda _request: calls.append("anthropic_subscription") or "WRONG_ROUTE",
+    )
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic_api") or "CANARY_OK",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", "0")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.billing_route == "api_key"
+    assert calls == ["anthropic_api"]
+
+
+@pytest.mark.parametrize("value", ["false", "no", "off", "0"])
+def test_kill_switch_accepts_common_falsy_spellings(monkeypatch, value):
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", value)
+    assert llm._subscription_first_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", "True"])
+def test_kill_switch_defaults_and_common_truthy_spellings_stay_on(monkeypatch, value):
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", value)
+    assert llm._subscription_first_enabled() is True
+
+
+def test_subscription_first_default_is_on_when_unset(monkeypatch):
+    monkeypatch.delenv("VOICE_OS_SUBSCRIPTION_FIRST", raising=False)
+    assert llm._subscription_first_enabled() is True
+
+
+def test_billing_route_never_crosses_provider_on_subscription_failure(monkeypatch):
+    """A subscription outage on provider A must not make provider A's
+    request look like a retryable cross-provider failure: it silently
+    demotes to A's own API key, so provider B (openai) is never tried."""
+    calls = []
+
+    def subscription_unavailable(_request):
+        calls.append("anthropic_subscription")
+        raise subscription_cli.SubscriptionUnavailable("timed out")
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-opus-4-8")
+    monkeypatch.setattr(
+        subscription_cli, "anthropic_subscription_complete", subscription_unavailable
+    )
+    monkeypatch.setattr(
+        llm,
+        "_anthropic_adapter",
+        lambda _request: calls.append("anthropic_api") or "CANARY_OK",
+    )
+    monkeypatch.setattr(
+        llm,
+        "_openai_adapter",
+        lambda _request: calls.append("openai_api") or "WRONG_PROVIDER",
+        raising=False,
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("OPENAI_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_SUBSCRIPTION_FIRST", "1")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic,openai")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "anthropic"
+    assert result.billing_route == "api_key"
+    assert calls == ["anthropic_subscription", "anthropic_api"]
+
+
+def test_billing_route_reaches_persona_and_provenance(monkeypatch):
+    routed = llm.RoutedText(
+        "Revised text.",
+        provider="anthropic",
+        model="claude-opus-4-8",
+        policy_outcome="equivalent",
+        billing_route="subscription",
+    )
+    monkeypatch.setattr(llm, "complete", lambda *args, **kwargs: routed)
+    target = {
+        "rhetorical_pace": 0.5,
+        "risk_tolerance": 0.5,
+        "sentence_rhythm": 0.5,
+        "escalation_pattern": 0.5,
+        "hedging_behavior": 0.5,
+        "editorial_register": 0.5,
+    }
+
+    result = GenerativePersona().revise("Draft.", target, [], [])
+    assert result.billing_route == "subscription"
+
+    state = {"provenance": {"voice_os_version": "test", "live_model": None}}
+    update = _stamp_live_model(state, result)
+    assert update["provenance"]["billing_route"] == "subscription"

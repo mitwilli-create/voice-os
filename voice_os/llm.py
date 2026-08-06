@@ -42,12 +42,14 @@ class RoutedText(str):
         model: str,
         policy_outcome: str,
         fallback_reason: str | None = None,
+        billing_route: str | None = None,
     ):
         instance = super().__new__(cls, value)
         instance.provider = provider
         instance.model = model
         instance.policy_outcome = policy_outcome
         instance.fallback_reason = fallback_reason
+        instance.billing_route = billing_route
         return instance
 
 
@@ -252,15 +254,73 @@ def _xai_adapter(request: dict) -> str:
     ).strip()
 
 
+def _subscription_first_enabled() -> bool:
+    """Billing kill switch. Default on: prefer a paid CLI subscription over
+    a metered API key wherever one is available for the selected provider.
+
+    Set VOICE_OS_SUBSCRIPTION_FIRST=0 (or false/no/off) to force every live
+    call onto metered API-key billing in one step. This never changes which
+    provider or model the policy router selects, only how the call is paid.
+    """
+    return os.environ.get("VOICE_OS_SUBSCRIPTION_FIRST", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _billing_aware_adapter(provider, subscription_fn, api_fn, billing_state):
+    """Wrap a provider's metered API adapter with a subscription-first try.
+
+    Subscription failures never raise past this wrapper: they demote to the
+    same provider's metered adapter so the router's cross-provider fallback
+    and error-classification behavior (provider_policy._provider_error_kind)
+    is driven only by the eventual real request, never by a CLI-unavailable
+    condition. billing_state records which route actually served the
+    request so the caller can stamp it into provenance after routing.
+    """
+
+    def adapter(request: dict) -> str:
+        if subscription_fn is not None and _subscription_first_enabled():
+            try:
+                text = subscription_fn(request)
+            except Exception as exc:  # noqa: BLE001 - deliberately broad; see module docstring
+                _warn_once(
+                    f"{provider} subscription route unavailable "
+                    f"({type(exc).__name__}: {exc}); using API key"
+                )
+            else:
+                billing_state[provider] = "subscription"
+                return text
+        text = api_fn(request)
+        billing_state[provider] = "api_key"
+        return text
+
+    return adapter
+
+
 def _route_live_completion(
     *, system: str, prompt: str, max_tokens: int
 ) -> RoutedText:
     from .provider_policy import ProviderPolicyRouter
+    from .subscription_cli import (
+        anthropic_subscription_complete,
+        openai_subscription_complete,
+    )
 
+    billing_state: dict[str, str] = {}
     router = ProviderPolicyRouter(
         adapters={
-            "anthropic": _anthropic_adapter,
-            "openai": _openai_adapter,
+            "anthropic": _billing_aware_adapter(
+                "anthropic", anthropic_subscription_complete, _anthropic_adapter, billing_state
+            ),
+            "openai": _billing_aware_adapter(
+                "openai", openai_subscription_complete, _openai_adapter, billing_state
+            ),
+            # No verified CLI-subscription route exists for these two today
+            # (see the worktree report): Gemini/Grok CLIs were investigated
+            # but not wired in, so they stay API-key billed.
             "google": _google_adapter,
             "xai": _xai_adapter,
         },
@@ -324,4 +384,5 @@ def _route_live_completion(
         model=result.route.model,
         policy_outcome=result.route.outcome,
         fallback_reason=result.fallback_reason,
+        billing_route=billing_state.get(result.route.provider, "api_key"),
     )

@@ -166,10 +166,13 @@ def _stamp_live_model(state: VoiceState, result: PersonaResult) -> dict:
     provenance["model"] = result.model or llm.DEFAULT_MODEL
     provenance.pop("policy_outcome", None)
     provenance.pop("fallback_reason", None)
+    provenance.pop("billing_route", None)
     if result.policy_outcome:
         provenance["policy_outcome"] = result.policy_outcome
     if result.fallback_reason:
         provenance["fallback_reason"] = result.fallback_reason
+    if result.billing_route:
+        provenance["billing_route"] = result.billing_route
     return {"provenance": provenance}
 
 
