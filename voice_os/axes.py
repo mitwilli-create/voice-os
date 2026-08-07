@@ -6,7 +6,7 @@ space for register calibration deltas (calibration.py).
 
 Historical note: docs/architecture.md previously described a second set of six
 "register dimensions" (directness, structure, warmth, formality, precision,
-assertiveness) used by the claude.ai Projects deployment. Those are now
+assertiveness) used by the legacy claude.ai Projects deployment. Those are now
 re-expressed as deltas on the canonical axes via this mapping:
 
     directness    -> rhetorical_pace
@@ -17,8 +17,8 @@ re-expressed as deltas on the canonical axes via this mapping:
     formality     -> editorial_register
 
 Each axis is scored 0.0 to 1.0 by a deterministic heuristic. The heuristics
-are intentionally simple and inspectable; when an Anthropic API key is
-available the pipeline layers Claude-based judgment on top (see personas.py),
+are intentionally simple and inspectable; when an approved provider key is
+available the pipeline layers policy-routed judgment on top (see personas.py),
 but the deterministic layer always runs so results are reproducible offline.
 """
 

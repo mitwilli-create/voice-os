@@ -32,6 +32,8 @@ class VoiceState(TypedDict):
     # canonical signature-move keys the caller opted out of
     # (voice_os/moves.py CATALOG); a detected avoided move blocks a pass.
     avoid: list[str]
+    recipient: str | None
+    recipient_intel: str | None
 
     # model/KB resolution inputs (serializable path strings; None = default)
     corpus_path: str | None
@@ -106,6 +108,8 @@ def initial_state(
     max_revisions: int,
     redraft: bool = False,
     avoid: list[str] | None = None,
+    recipient: str | None = None,
+    recipient_intel: str | None = None,
     corpus_path: str | None = None,
     chunks_dir: str | None = None,
     mined_dir: str | None = None,
@@ -126,6 +130,8 @@ def initial_state(
         "max_revisions": max_revisions,
         "redraft": redraft,
         "avoid": list(avoid or []),
+        "recipient": recipient,
+        "recipient_intel": recipient_intel,
         "corpus_path": corpus_path,
         "chunks_dir": chunks_dir,
         "mined_dir": mined_dir,

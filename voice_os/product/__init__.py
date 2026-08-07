@@ -64,6 +64,8 @@ def draft(
     max_revisions: int = 2,
     redraft: bool = False,
     avoid: list[str] | None = None,
+    recipient: str | None = None,
+    recipient_intel: str | None = None,
     run_id: str | None = None,
     corpus_path: str | None = None,
     chunks_dir: str | None = None,
@@ -110,7 +112,12 @@ def draft(
         stakes=stakes,
         medium=medium,
     )
-    VoiceContext(**ctx).validate()  # fail fast before any graph work
+    # The normalizer returns a dict matching the core context axes; VoiceContext ignores recipient/intel
+    # so we add them separately for the state.
+    ctx_for_validation = dict(ctx)
+    if recipient is not None:
+        ctx_for_validation["recipient"] = recipient
+    VoiceContext(**ctx_for_validation).validate()  # fail fast before any graph work
 
     graph = _graph_module("draft")
     run = run_id or graph.new_run_id()
@@ -119,6 +126,8 @@ def draft(
         max_revisions=max_revisions,
         redraft=redraft,
         avoid=avoid_canonical,
+        recipient=recipient,
+        recipient_intel=recipient_intel,
         corpus_path=corpus_path,
         chunks_dir=chunks_dir,
         mined_dir=mined_dir,

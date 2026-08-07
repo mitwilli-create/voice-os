@@ -38,6 +38,67 @@ class ProviderPolicyHardStop(RuntimeError):
 
 
 CALIBRATED_ROUTES = {
+    # Subscription-billed Opus, added 2026-08-06 on Mitchell's ruling: "use the
+    # subscription, not the metered key". It is listed FIRST because it is the
+    # only route in this table that costs nothing at the margin. Every other
+    # entry here, Google included, bills a metered API key.
+    #
+    # It reaches the model through ~/.claude/bin/claude, a wrapper that strips
+    # ANTHROPIC_API_KEY so the call goes over subscription OAuth. Verified
+    # 2026-08-06: invoking that wrapper with a deliberately bogus
+    # ANTHROPIC_API_KEY still returns a correct completion, which a metered
+    # call could not do.
+    #
+    # Marked "equivalent" rather than "degraded" on the same basis as the two
+    # anthropic entries below: it resolves to the same Opus family, not a
+    # smaller model. It is a BILLING path change, not a capability change.
+    ("claude_cli", "opus"): ProviderRoute(
+        provider="claude_cli",
+        model="opus",
+        outcome="equivalent",
+    ),
+    # SECONDARY subscription route, same ruling. Billed to the ChatGPT
+    # subscription via ~/.codex/auth.json auth_mode "chatgpt". Marked
+    # "degraded" rather than "equivalent" because, unlike claude_cli, it is a
+    # different model family from the one this pipeline's thresholds were
+    # calibrated against, so it must not be treated as a like for like swap.
+    # It runs only as a fallback, which is exactly the intent.
+    ("codex_cli", "gpt-5.6-sol"): ProviderRoute(
+        provider="codex_cli",
+        model="gpt-5.6-sol",
+        outcome="degraded",
+    ),
+    # THIRD, same subscription and same wrapper as claude_cli:opus, just a
+    # smaller model. "sonnet" is a verified alias of the claude CLI, which
+    # advertises fable, opus and sonnet.
+    ("claude_cli", "sonnet"): ProviderRoute(
+        provider="claude_cli",
+        model="sonnet",
+        outcome="degraded",
+    ),
+    # FOURTH. GPT-5.6 Terra, the balanced middle tier of the same family,
+    # added 2026-08-06 on Mitchell's request after the Sol/Terra/Luna family
+    # was resolved. Slotted between sonnet and luna because that is the only
+    # placement consistent with both his stated order and capability descent.
+    # Verified on this machine the same way as the others: codex exec with
+    # -m gpt-5.6-terra and a bogus OPENAI_API_KEY returned a completion.
+    ("codex_cli", "gpt-5.6-terra"): ProviderRoute(
+        provider="codex_cli",
+        model="gpt-5.6-terra",
+        outcome="degraded",
+    ),
+    # FIFTH and last, per Mitchell's 2026-08-06 ordering. "Luna" resolved to
+    # GPT-5.6 Luna, the fast and cheap tier of OpenAI's GPT-5.6 family
+    # (Sol flagship, Terra balanced, Luna fastest), released 2026-07-09.
+    # Confirmed by web search, then verified on this machine: codex exec with
+    # -m gpt-5.6-luna and a deliberately bogus OPENAI_API_KEY returned a
+    # correct completion, so the id is real AND it bills the subscription.
+    # Degraded because it is the smallest model in the ladder.
+    ("codex_cli", "gpt-5.6-luna"): ProviderRoute(
+        provider="codex_cli",
+        model="gpt-5.6-luna",
+        outcome="degraded",
+    ),
     ("anthropic", "claude-fable-5"): ProviderRoute(
         provider="anthropic",
         model="claude-fable-5",
@@ -63,13 +124,46 @@ CALIBRATED_ROUTES = {
         model="grok-4.5",
         outcome="degraded",
     ),
+    ("openrouter", "openai/gpt-oss-120b"): ProviderRoute(
+        provider="openrouter",
+        model="openai/gpt-oss-120b",
+        outcome="degraded",
+    ),
+    ("openrouter", "deepseek/deepseek-v4-flash"): ProviderRoute(
+        provider="openrouter",
+        model="deepseek/deepseek-v4-flash",
+        outcome="degraded",
+    ),
+    ("openrouter", "qwen/qwen3-coder"): ProviderRoute(
+        provider="openrouter",
+        model="qwen/qwen3-coder",
+        outcome="degraded",
+    ),
+    ("openrouter", "moonshotai/kimi-k2.6"): ProviderRoute(
+        provider="openrouter",
+        model="moonshotai/kimi-k2.6",
+        outcome="degraded",
+    ),
+    ("openrouter", "minimax/minimax-m3"): ProviderRoute(
+        provider="openrouter",
+        model="minimax/minimax-m3",
+        outcome="degraded",
+    ),
 }
 
 _CREDENTIAL_KEYS = {
+    # The subscription route has no API key by design, so its "credential" is
+    # the explicit opt-in flag that says the subscription CLI is available.
+    # Deliberately NOT ANTHROPIC_API_KEY: that key being present must never be
+    # what makes this route eligible, or a misconfigured run would bill the
+    # metered key while reporting itself as a subscription call.
+    "claude_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "CLAUDE_CODE_OAUTH_TOKEN"),
+    "codex_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "CODEX_OAUTH_TOKEN"),
     "anthropic": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
     "openai": ("OPENAI_API_KEY",),
     "google": ("GEMINI_API_KEY",),
     "xai": ("XAI_API_KEY",),
+    "openrouter": ("OPENROUTER_API_KEY",),
 }
 
 def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
@@ -93,6 +187,19 @@ def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
         return "timeout", True
     if status in {401, 403}:
         return "credential", False
+    # Anthropic reports exhausted prepaid credits as HTTP 400 rather than a
+    # quota-shaped 402/429. Treat that specific billing response as retryable
+    # so a configured fallback can carry the request. Generic 400s remain
+    # terminal because they usually mean the request or model is invalid.
+    if status == 400 and any(
+        marker in signal
+        for marker in (
+            "credit balance is too low",
+            "insufficient credits",
+            "purchase credits",
+        )
+    ):
+        return "rate_quota", True
     if status == 400:
         return "invalid_request", False
     if status == 529 or (isinstance(status, int) and status >= 500):
@@ -158,6 +265,13 @@ class ProviderPolicyRouter:
         allow_degraded: bool = False,
         allowed_providers: set[str] | None = None,
     ) -> CompletionResult:
+        if provider == "anthropic" and self.env.get(
+            "VOICE_OS_ALLOW_ANTHROPIC", ""
+        ).lower() not in {"1", "true", "yes", "on"}:
+            raise ProviderPolicyHardStop(
+                "anthropic_provider_prohibited",
+                kind="policy",
+            )
         plan = self.explain(provider=provider, model=model)
         if allowed_providers is not None and provider not in allowed_providers:
             raise ProviderPolicyHardStop(

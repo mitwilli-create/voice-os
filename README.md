@@ -1,6 +1,6 @@
 # voice-os
 
-A personal voice operating system: six-axis voice scoring, register calibration mined from a personal corpus, dual-persona drafting, calibrated QA gates, and a measured evaluation harness. Built on Claude. `import voice_os; voice_os.draft(...)` returns a checkpointed draft in the author's voice with an explicit gate decision: pass, or reject when the bounded revision loop cannot clear the bar.
+A personal voice operating system: six-axis voice scoring, register calibration mined from a personal corpus, dual-persona drafting, calibrated QA gates, and a measured evaluation harness. Live completions use the task-based provider policy. `import voice_os; voice_os.draft(...)` returns a checkpointed draft in the author's voice with an explicit gate decision: pass, or reject when the bounded revision loop cannot clear the bar.
 
 The engine began as the executive "Voice DNA" RAG pipeline I built for the Office of Engineering Strategy (OES) inside a large engineering organization, a digital twin for a VP-level executive's communications calibrated on 6.9M+ words. That system is the provenance; this repo has since become the personal successor: the same architecture, recalibrated and extended on my own corpus: 143,000+ provenance-tagged chunks across 13 source types (sent email, iMessage and texts, Instagram DMs, posts, stories and comments, Facebook and Messenger, professional documents in nine subtypes from broadcast scripts to CVs to program charters, and on-camera transcripts with pacing signals).
 
@@ -27,10 +27,10 @@ Requires Python 3.10 or newer.
 git clone https://github.com/mitwilli-create/voice-os.git
 cd voice-os
 
-# Optional: enables the live Claude personas and the LangGraph layer.
+# Optional: enables live provider-routed personas and the LangGraph layer.
 # The pipeline runs deterministically offline without it.
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=your_key_here
+export OPENROUTER_API_KEY=your_key_here
 export VOICE_OS_PROVIDER_POLICY_ENABLED=true
 
 # Run a scoring pass against the sample corpus
@@ -105,9 +105,9 @@ Shipped and measured: the callable layer (`voice_os.draft()`), the extended cont
 
 The personal corpus itself (chunk stores under `corpus/`, raw exports under `sources/`, mined artifacts, KB snapshots) is local-only and gitignored; layered privacy gates (gitignore plus pre-commit and pre-push hooks, active once a clone enables them via `git config core.hooksPath .githooks`) keep personal data out of the repo. Sample data in `data/` is synthetic but structurally representative, and the whole test suite runs against it.
 
-Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key. With credentials, the generative and adversarial personas use only a provider and model pair that has an explicit policy entry. Anthropic Claude Fable 5 is the primary equivalent route and Claude Opus 4.8 is the immediate equivalent fallback. Google Gemini 3.6 Flash, OpenAI GPT-5.6 Sol, and xAI Grok 4.5 follow as degraded fallbacks in that order. Fable uses low effort so its always-on adaptive thinking does not consume the visible-output budget. On the initial four-case held-out parity tranche, Fable reached 0.9367 style fidelity versus Opus at 0.9333, matched Opus's 75% pass rate, retained 97.1% of source length, and produced zero banned or em-dash hits. The sample is intentionally labeled initial evidence, not a universal guarantee. Gemini remains the first cross-provider fallback because its installed full-pipeline calibration smoke was faster and produced higher fidelity than OpenAI on the same synthetic fixture; Grok produced the highest fidelity but was substantially slower. A fallback may run only after a retryable refusal, malformed response, quota, capacity, timeout, or availability failure when `VOICE_OS_ALLOW_DEGRADED=true` and `VOICE_OS_ALLOWED_PROVIDERS` explicitly includes it. An unknown alternate hard-stops before draft or exemplar text is sent.
+Every stage has a deterministic offline implementation, so scoring and gating are reproducible without an API key. With credentials, the generative and adversarial personas use only a provider and model pair that has an explicit policy entry. Voice OS defaults to the OpenRouter open-weight toil lane, with DeepSeek, GPT-OSS, Qwen, Kimi, and MiniMax available for cheap work. High-stakes callers can explicitly select calibrated OpenAI or Google routes. Grok and Perplexity are specialist routes in the wider provider policy, for realtime social context and citable web research. Anthropic and Claude are not automatic routes. A fallback may run only after a retryable refusal, malformed response, quota, capacity, timeout, or availability failure when `VOICE_OS_ALLOW_DEGRADED=true` and `VOICE_OS_ALLOWED_PROVIDERS` explicitly includes it. An unknown alternate hard-stops before draft or exemplar text is sent.
 
-**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the selected policy-approved provider. Fable 5 requires 30-day provider retention and is not eligible for zero data retention. `VOICE_OS_PROVIDER_POLICY_ENABLED=true` enables the policy path. `VOICE_OS_PROVIDER` and `VOICE_OS_MODEL` select the requested route, but selection never overrides the policy gate. `VOICE_OS_ANTHROPIC_FALLBACK_MODEL`, `VOICE_OS_OPENAI_MODEL`, `VOICE_OS_GEMINI_MODEL`, and `VOICE_OS_XAI_MODEL` select the registered fallback models. Cross-provider fallback is disabled unless `VOICE_OS_ALLOW_DEGRADED=true` and `VOICE_OS_ALLOWED_PROVIDERS` explicitly includes the fallback provider. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. This privacy override runs before client caches and routing. Live envelopes and checkpoints stamp provider, model, policy outcome, and the safe fallback reason. Checkpoints contain draft and exemplar text; they live under the gitignored `var/` directory by default, or wherever `var_dir` / `VOICE_OS_VAR_DIR` points, so keep overrides outside tracked paths.
+**Privacy note:** in live mode the draft text, target profile, banned phrases, revision signals, selected real exemplar messages (bounded, held-in only), and distilled KB voice patterns are sent to the selected policy-approved provider. `VOICE_OS_PROVIDER` and `VOICE_OS_MODEL` select the requested route, but selection never overrides the policy gate. Cross-provider fallback is disabled unless `VOICE_OS_ALLOW_DEGRADED=true` and `VOICE_OS_ALLOWED_PROVIDERS` explicitly includes the fallback provider. Set `VOICE_OS_OFFLINE=1` to force offline mode for sensitive drafts even when credentials are present. This privacy override runs before client caches and routing. Live envelopes and checkpoints stamp provider, model, policy outcome, and the safe fallback reason. Checkpoints contain draft and exemplar text; they live under the gitignored `var/` directory by default, or wherever `var_dir` / `VOICE_OS_VAR_DIR` points, so keep overrides outside tracked paths.
 
 Tests: `python -m pytest tests/` runs the full suite (offline, no API key needed). The core scoring tests also run dependency-free via `python -m unittest discover -s tests -v`.
 
@@ -133,7 +133,7 @@ alignment history: `docs/live-alignment.md`.
 
 ## Built with
 
-- Claude (Anthropic): generation, adversarial critique, live judging
+- OpenRouter open-weight, OpenAI, Google, Grok, and Perplexity through the provider policy
 - Python, LangGraph (contained in `voice_os/product/`)
 - Custom scoring, mining, and evaluation layers
 

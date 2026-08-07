@@ -68,6 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "comma-separated); known moves: fragment-date-opener, x-not-y, "
         "no-x-run, punch-tag-closer, fragment-closer",
     )
+    p_draft.add_argument("--recipient", default=None, help="free text recipient subject for intel lookup")
+    p_draft.add_argument("--recipient-intel", default=None, help="textual audience intel to inject into guidance")
     p_draft.add_argument("--run-id", default=None)
     p_draft.add_argument(
         "--file", default=None, help="read draft text from a file instead of stdin"
@@ -141,6 +143,8 @@ def _cmd_draft(args: argparse.Namespace) -> int:
         max_revisions=args.max_revisions,
         redraft=args.redraft,
         avoid=avoid or None,
+        recipient=args.recipient,
+        recipient_intel=args.recipient_intel,
         run_id=args.run_id,
         corpus_path=args.corpus_path,
         chunks_dir=args.chunks_dir,

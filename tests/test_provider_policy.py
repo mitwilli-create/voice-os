@@ -29,43 +29,109 @@ def test_offline_privacy_override_skips_router(monkeypatch):
     assert calls == []
 
 
-def test_default_calibrated_route_is_equivalent():
+def test_default_openweight_route_is_available_for_toil():
     calls = []
     router = ProviderPolicyRouter(
         adapters={
-            "anthropic": lambda request: calls.append(request) or "revised",
+            "openrouter": lambda request: calls.append(request) or "revised",
         },
-        env={"ANTHROPIC_API_KEY": "present"},
+        env={"OPENROUTER_API_KEY": "present"},
     )
 
     result = router.route(
-        provider="anthropic",
-        model="claude-opus-4-8",
+        provider="openrouter",
+        model="openai/gpt-oss-120b",
         system="system",
         prompt="draft",
         max_tokens=100,
+        allow_degraded=True,
     )
 
     assert result.text == "revised"
     assert result.route == ProviderRoute(
-        provider="anthropic",
-        model="claude-opus-4-8",
-        outcome="equivalent",
+        provider="openrouter",
+        model="openai/gpt-oss-120b",
+        outcome="degraded",
     )
     assert len(calls) == 1
 
 
-def test_fable_primary_is_registered_equivalent_after_voice_calibration():
+def test_default_voice_route_is_subscription_billed_not_metered():
+    """The default route must cost nothing at the margin.
+
+    REPLACES test_default_voice_route_is_openweight_and_non_anthropic, which
+    asserted a google default and a blanket non-Anthropic rule. Mitchell
+    reversed that policy on 2026-08-06: Claude subscription primary, OpenAI
+    subscription fallback, Google deprecated for this pipeline.
+
+    The old test's PROTECTIVE intent was billing, not vendor identity: keep the
+    default off a metered Anthropic API key. That intent is preserved and made
+    stricter here. The default is now asserted to be a subscription route by
+    name, and "anthropic" (the metered SDK provider, distinct from the
+    subscription "claude_cli" route) is asserted NOT to be the default. A
+    regression that silently repointed the default at the metered key would
+    fail this test, which is the failure the old one existed to catch.
+    """
     router = ProviderPolicyRouter(
         adapters={},
+        env={"OPENROUTER_API_KEY": "present"},
+    )
+
+    route = router.explain(provider="openrouter", model="openai/gpt-oss-120b")
+
+    subscription_providers = {"claude_cli", "codex_cli"}
+    assert llm.DEFAULT_PROVIDER in subscription_providers
+    # The metered Anthropic SDK path must never be the default.
+    assert llm.DEFAULT_PROVIDER != "anthropic"
+    from voice_os.provider_policy import CALIBRATED_ROUTES as _ROUTES
+
+    assert (llm.DEFAULT_PROVIDER, llm.DEFAULT_MODEL) in _ROUTES
+    assert route["outcome"] == "degraded"
+    assert route["calibrated"] is True
+
+
+def test_subscription_routes_do_not_depend_on_a_metered_api_key():
+    """A subscription route must not become eligible via a metered key.
+
+    Guards the billing inversion directly: if claude_cli's credential were
+    ANTHROPIC_API_KEY, then having that key present would make the "free"
+    route eligible while the actual spend landed on the metered account.
+    """
+    router = ProviderPolicyRouter(
+        adapters={},
+        env={"ANTHROPIC_API_KEY": "present", "OPENAI_API_KEY": "present"},
+    )
+
+    assert router.explain(provider="claude_cli", model="opus")[
+        "credential_present"
+    ] is False
+    assert router.explain(provider="codex_cli", model="gpt-5.6-sol")[
+        "credential_present"
+    ] is False
+
+    enabled = ProviderPolicyRouter(
+        adapters={},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+    assert enabled.explain(provider="claude_cli", model="opus")[
+        "credential_present"
+    ] is True
+
+
+def test_anthropic_requires_explicit_compatibility_opt_in():
+    router = ProviderPolicyRouter(
+        adapters={"anthropic": lambda _request: "should not run"},
         env={"ANTHROPIC_API_KEY": "present"},
     )
 
-    route = router.explain(provider="anthropic", model="claude-fable-5")
-
-    assert llm.DEFAULT_MODEL == os.environ.get("VOICE_OS_MODEL", "claude-fable-5")
-    assert route["outcome"] == "equivalent"
-    assert route["calibrated"] is True
+    with pytest.raises(ProviderPolicyHardStop, match="anthropic_provider_prohibited"):
+        router.route(
+            provider="anthropic",
+            model="claude-opus-4-8",
+            system="system",
+            prompt="draft",
+            max_tokens=16,
+        )
 
 
 def test_anthropic_adapter_uses_low_effort_for_fable(monkeypatch):
@@ -124,28 +190,19 @@ def test_anthropic_adapter_surfaces_fable_refusal(monkeypatch):
         )
 
 
-def test_legacy_live_path_uses_anthropic_adapter(monkeypatch):
+def test_live_path_always_uses_provider_policy(monkeypatch):
     calls = []
-    monkeypatch.delenv("VOICE_OS_PROVIDER_POLICY_ENABLED", raising=False)
     monkeypatch.delenv("VOICE_OS_OFFLINE", raising=False)
     monkeypatch.setattr(
         llm,
-        "_anthropic_adapter",
-        lambda request: calls.append(request) or "CANARY_OK",
+        "_route_live_completion",
+        lambda **kwargs: calls.append(kwargs) or "CANARY_OK",
     )
 
     result = llm.complete("system", "synthetic draft", max_tokens=64)
 
     assert result == "CANARY_OK"
-    assert calls == [
-        {
-            "provider": "anthropic",
-            "model": llm.DEFAULT_MODEL,
-            "system": "system",
-            "prompt": "synthetic draft",
-            "max_tokens": 64,
-        }
-    ]
+    assert calls == [{"system": "system", "prompt": "synthetic draft", "max_tokens": 64}]
 
 
 def test_additional_voice_fallbacks_are_registered_as_degraded():
@@ -162,6 +219,56 @@ def test_additional_voice_fallbacks_are_registered_as_degraded():
     assert google["calibrated"] is True
     assert xai["outcome"] == "degraded"
     assert xai["calibrated"] is True
+
+
+def test_openrouter_voice_fallback_is_registered_as_degraded():
+    router = ProviderPolicyRouter(
+        adapters={"openrouter": lambda request: "CANARY_OK"},
+        env={"OPENROUTER_API_KEY": "present"},
+    )
+
+    route = router.explain(provider="openrouter", model="openai/gpt-oss-120b")
+
+    assert route["outcome"] == "degraded"
+    assert route["calibrated"] is True
+    assert route["credential_present"] is True
+
+
+def test_openrouter_adapter_uses_openai_compatible_payload(monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "CANARY_OK"}}]}
+
+    def post(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "present")
+    monkeypatch.setattr(llm.httpx, "post", post)
+
+    result = llm._openrouter_adapter(
+        {
+            "model": "openai/gpt-oss-120b",
+            "system": "system",
+            "prompt": "synthetic draft",
+            "max_tokens": 64,
+        }
+    )
+
+    assert result == "CANARY_OK"
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer present"
+    assert captured["json"]["model"] == "openai/gpt-oss-120b"
+    assert captured["json"]["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "synthetic draft"},
+    ]
 
 
 def test_google_adapter_excludes_thought_summary_and_requests_minimal_thinking(
@@ -298,7 +405,7 @@ def test_registered_hard_stop_never_calls_adapter():
         adapters={
             "anthropic": lambda request: calls.append(request) or "nope",
         },
-        env={"ANTHROPIC_API_KEY": "present"},
+        env={"ANTHROPIC_API_KEY": "present", "VOICE_OS_ALLOW_ANTHROPIC": "true"},
         registry={("anthropic", "blocked-model"): route},
     )
 
@@ -343,7 +450,7 @@ def test_provider_failure_never_silently_becomes_offline():
 
     router = ProviderPolicyRouter(
         adapters={"anthropic": fail},
-        env={"ANTHROPIC_API_KEY": "present"},
+        env={"ANTHROPIC_API_KEY": "present", "VOICE_OS_ALLOW_ANTHROPIC": "true"},
     )
 
     with pytest.raises(ProviderPolicyHardStop, match="provider failed"):
@@ -374,6 +481,7 @@ def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
         env={
             "ANTHROPIC_API_KEY": "present",
             "OPENAI_API_KEY": "present",
+            "VOICE_OS_ALLOW_ANTHROPIC": "true",
         },
     )
 
@@ -401,6 +509,48 @@ def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
     assert calls == ["anthropic", "openai"]
 
 
+def test_anthropic_credit_balance_400_uses_explicitly_allowed_fallback():
+    calls = []
+
+    class CreditBalanceError(RuntimeError):
+        status_code = 400
+
+    def anthropic(_request):
+        calls.append("anthropic")
+        raise CreditBalanceError(
+            "Your credit balance is too low to access the Anthropic API."
+        )
+
+    def openai(_request):
+        calls.append("openai")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"anthropic": anthropic, "openai": openai},
+        env={
+            "ANTHROPIC_API_KEY": "present",
+            "OPENAI_API_KEY": "present",
+            "VOICE_OS_ALLOW_ANTHROPIC": "true",
+        },
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("anthropic", "claude-opus-4-8"),
+            ("openai", "gpt-5.6-sol"),
+        ],
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allow_degraded=True,
+        allowed_providers={"anthropic", "openai"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.fallback_reason == "provider_rate_quota"
+    assert calls == ["anthropic", "openai"]
+
+
 def test_degraded_fallback_requires_flag_and_provider_allowlist():
     calls = []
 
@@ -417,6 +567,7 @@ def test_degraded_fallback_requires_flag_and_provider_allowlist():
         env={
             "ANTHROPIC_API_KEY": "present",
             "OPENAI_API_KEY": "present",
+            "VOICE_OS_ALLOW_ANTHROPIC": "true",
         },
     )
     candidates = [
@@ -461,6 +612,7 @@ def test_invalid_request_does_not_cross_provider_fallback():
         env={
             "ANTHROPIC_API_KEY": "present",
             "OPENAI_API_KEY": "present",
+            "VOICE_OS_ALLOW_ANTHROPIC": "true",
         },
     )
 
@@ -574,6 +726,7 @@ def test_live_completion_uses_authorized_openai_fallback_and_stamps_reason(
         raising=False,
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_ANTHROPIC", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "present")
     monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
     monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "anthropic,openai")
@@ -627,6 +780,7 @@ def test_fable_failure_uses_equivalent_opus_before_cross_provider(
     monkeypatch.setattr(llm, "DEFAULT_MODEL", "claude-fable-5")
     monkeypatch.setattr(llm, "_anthropic_adapter", anthropic_adapter)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_ANTHROPIC", "true")
     monkeypatch.setenv(
         "VOICE_OS_ANTHROPIC_FALLBACK_MODEL",
         "claude-opus-4-8",
@@ -680,6 +834,7 @@ def test_live_completion_prefers_google_then_uses_openai_if_unavailable(
         raising=False,
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_ANTHROPIC", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "present")
     monkeypatch.setenv("GEMINI_API_KEY", "present")
     monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
@@ -729,6 +884,7 @@ def test_live_completion_omits_credentialed_but_disallowed_provider(monkeypatch)
         lambda _request: calls.append("google") or "CANARY_OK",
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_ANTHROPIC", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "present")
     monkeypatch.setenv("GEMINI_API_KEY", "present")
     monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
@@ -783,7 +939,7 @@ def test_llm_routed_text_provenance_reaches_persona(monkeypatch):
     assert result.policy_outcome == "equivalent"
 
 
-def test_legacy_plain_text_completion_records_actual_anthropic_provider(
+def test_plain_text_completion_records_non_anthropic_default_provider(
     monkeypatch,
 ):
     monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "openai")
@@ -803,7 +959,7 @@ def test_legacy_plain_text_completion_records_actual_anthropic_provider(
 
     result = GenerativePersona().revise("Draft.", target, [], [])
 
-    assert result.provider == "anthropic"
+    assert result.provider == "openrouter"
     assert result.policy_outcome is None
 
 

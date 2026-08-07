@@ -1,7 +1,7 @@
 """Dual-persona routing: a generative persona revises drafts toward the
 voice target, an adversarial persona stress-tests the result.
 
-Both personas run deterministically offline; when a Claude client is
+Both personas run deterministically offline; when an approved live provider is
 available they use it and fall back to the offline path on any failure.
 """
 
@@ -134,9 +134,9 @@ class GenerativePersona:
             # deterministic scrub, never a revision signal.
             return PersonaResult(
                 text=scrub_em_dashes(revised),
-                notes=["revised by Claude"],
+                notes=["revised by provider policy"],
                 mode="live",
-                provider=getattr(revised, "provider", "anthropic"),
+                provider=getattr(revised, "provider", "openrouter"),
                 model=getattr(revised, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(revised, "policy_outcome", None),
                 fallback_reason=getattr(revised, "fallback_reason", None),
@@ -194,7 +194,7 @@ class AdversarialPersona:
                 text=text,
                 notes=findings,
                 mode="live",
-                provider=getattr(critique, "provider", "anthropic"),
+                provider=getattr(critique, "provider", "openrouter"),
                 model=getattr(critique, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(critique, "policy_outcome", None),
                 fallback_reason=getattr(critique, "fallback_reason", None),

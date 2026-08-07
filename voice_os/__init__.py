@@ -4,8 +4,8 @@ Public API (the foundation for the callable voice module):
 
     from voice_os import load_corpus, build_baseline, score_draft, run_pipeline
 
-Everything runs deterministically offline; Claude is layered on when
-credentials resolve (see voice_os.llm).
+Everything runs deterministically offline; live completions use the task-based
+provider policy in voice_os.llm.
 """
 
 from __future__ import annotations

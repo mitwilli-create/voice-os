@@ -234,6 +234,51 @@ def checkpoint_db_path(var_dir: str | None = None) -> str:
     return os.path.join(var_dir_for(var_dir), "runs.sqlite")
 
 
+# How long a writer waits for a competing writer's lock before giving up.
+# The Python default is 5s, which is short when several drafts run at once.
+_CHECKPOINT_BUSY_TIMEOUT_MS = 30_000
+
+
+def _open_checkpoint_conn(db_path: str) -> "sqlite3.Connection":
+    """Open the checkpoint DB in a mode that survives concurrency and hard kills.
+
+    WHY THIS EXISTS. On 2026-08-07 this database was found CORRUPT:
+
+        sqlite3.DatabaseError: database disk image is malformed
+
+    Every `voice_os draft` then crashed with EMPTY stdout, which made
+    writing-craft's `JSON.parse(result.stdout)` throw "Unexpected end of JSON
+    input", which surfaced to the apply-pack pipeline as
+    "writing craft unavailable" and DEFERRED every pack it touched. One corrupt
+    cache file silently stopped the whole pipeline, and the error it produced
+    named neither SQLite nor this file.
+
+    Cause, as far as it can be established: this connection was opened with
+    neither WAL nor a raised busy_timeout while up to five apply-pack lanes ran
+    concurrently, each spawning drafts that write here, and the run was then
+    ended with SIGKILL. Rollback-journal mode plus concurrent writers plus a
+    hard kill is the classic way to corrupt a SQLite file.
+
+    Two changes, both cheap:
+      - WAL: readers never block writers, and an interrupted write leaves a
+        recoverable -wal file instead of a torn main database.
+      - busy_timeout 30s: a concurrent writer waits rather than erroring out.
+
+    Both are set with PRAGMA rather than by swapping the driver, so nothing
+    about the checkpoint schema or LangGraph's use of it changes. Failure to
+    apply either is deliberately non-fatal: a checkpoint store that opens
+    without WAL is worse, but a draft that refuses to run at all is worse still,
+    and that is the failure this whole comment is about.
+    """
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(f"PRAGMA busy_timeout={_CHECKPOINT_BUSY_TIMEOUT_MS}")
+    except sqlite3.Error:
+        pass
+    return conn
+
+
 # --------------------------------------------------------------------------
 # Nodes: each returns a partial state update of plain serializable values.
 
@@ -324,6 +369,12 @@ def prepare(state: VoiceState) -> dict:
         "live_model": None,
     }
 
+    guidance = list(q.guidance)
+    if state.get("recipient_intel"):
+        intel = state["recipient_intel"]
+        recipient_name = state.get("recipient") or "recipient"
+        guidance.append(f"audience intel for {recipient_name}: {intel}")
+
     return {
         "target_profile": dict(q.target_profile),
         "baseline_mean": dict(model.baseline.mean),
@@ -331,7 +382,7 @@ def prepare(state: VoiceState) -> dict:
         "tone_mean": dict(q.tone.mean) if q.tone else None,
         "tone_std": dict(q.tone.std) if q.tone else None,
         "banned": list(q.banned),
-        "guidance": list(q.guidance),
+        "guidance": guidance,
         # Top exemplars only: enough voice evidence for the live prompt
         # without dominating it (personal data; see state.py note).
         "exemplars": [_bounded_exemplar(e) for e in q.exemplars[:3]],
@@ -663,7 +714,7 @@ def checkpointed_graph(var_dir: str | None = None):
     """
     db_path = checkpoint_db_path(var_dir)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = _open_checkpoint_conn(db_path)
     try:
         saver = SqliteSaver(conn)
         yield build_graph().compile(checkpointer=saver)
@@ -689,7 +740,7 @@ def run_history(run_id: str, var_dir: str | None = None) -> list[dict]:
     db_path = checkpoint_db_path(var_dir)
     if not os.path.exists(db_path):
         return []
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = _open_checkpoint_conn(db_path)
     try:
         saver = SqliteSaver(conn)
         steps = []
