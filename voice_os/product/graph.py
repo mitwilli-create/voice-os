@@ -164,12 +164,27 @@ def _stamp_live_model(state: VoiceState, result: PersonaResult) -> dict:
     provenance["live_model"] = result.model or llm.DEFAULT_MODEL
     provenance["provider"] = result.provider or llm.DEFAULT_PROVIDER
     provenance["model"] = result.model or llm.DEFAULT_MODEL
-    provenance.pop("policy_outcome", None)
-    provenance.pop("fallback_reason", None)
+    for key in (
+        "requested_slot",
+        "resolved_model",
+        "account_type",
+        "policy_outcome",
+        "fallback_reason",
+        "failure_ledger",
+    ):
+        provenance.pop(key, None)
+    if result.requested_slot:
+        provenance["requested_slot"] = result.requested_slot
+    provenance["resolved_model"] = result.resolved_model or result.model
+    if result.account_type:
+        provenance["account_type"] = result.account_type
     if result.policy_outcome:
         provenance["policy_outcome"] = result.policy_outcome
     if result.fallback_reason:
         provenance["fallback_reason"] = result.fallback_reason
+    provenance["failure_ledger"] = [
+        dict(entry) for entry in result.failure_ledger
+    ]
     return {"provenance": provenance}
 
 

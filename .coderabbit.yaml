@@ -15,7 +15,7 @@ reviews:
   request_changes_workflow: false
   high_level_summary: true
   poem: false
-  # decorative features off — provider-output variance, never a defect
+  # decorative features off: provider-output variance, never a defect
   sequence_diagrams: false
   suggested_labels: false
   suggested_reviewers: false

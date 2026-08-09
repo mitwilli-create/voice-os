@@ -15,7 +15,7 @@ Mitchell's voice operating system: scores and calibrates drafts against his actu
 - **The live baseline moves only explicitly:** `var/eval/baseline.json` (on-disk state under gitignored `var/`, never committed) gates measured changes and is updated solely via `python3 -m voice_os.harness gate --update-baseline`, never as a side effect.
 - **Honest measurement discipline:** `alignment_judged` (LLM-judged, live) is the truth metric; `alignment_offline` only gates regressions and is never reported as an approved number.
 - **No em dashes anywhere in this repo.** Banned outright.
-- **Privacy switch:** live mode sends draft text + exemplars to the Anthropic API, and live runs spend real money. Develop and test with `VOICE_OS_OFFLINE=1`; never trigger live runs (harness `run`, live `draft`) on your own initiative; Mitchell asks for them.
+- **Privacy switch:** live mode sends draft text and exemplars to each attempted policy-approved provider, and metered fallbacks can spend real money. Develop and test with `VOICE_OS_OFFLINE=1`; never trigger live runs (harness `run`, live `draft`) on your own initiative; Mitchell asks for them.
 - **Process:** design-first PRs. Local tests, lint, static checks, security checks, diff checks, and review skills are the required gates. Hosted reviewers are not automatic and are not required for merge. Never invoke Qodo or any metered reviewer.
 
 ## Commands

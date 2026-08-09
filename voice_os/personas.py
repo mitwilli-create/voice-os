@@ -111,6 +111,8 @@ class PersonaResult:
     fallback_reason: str | None = None
     requested_slot: str | None = None
     resolved_model: str | None = None
+    account_type: str | None = None
+    failure_ledger: tuple[dict, ...] = ()
 
 
 class GenerativePersona:
@@ -144,6 +146,8 @@ class GenerativePersona:
                 fallback_reason=getattr(revised, "fallback_reason", None),
                 requested_slot=getattr(revised, "requested_slot", None),
                 resolved_model=getattr(revised, "resolved_model", None),
+                account_type=getattr(revised, "account_type", None),
+                failure_ledger=tuple(getattr(revised, "failure_ledger", ())),
             )
         return self._offline_revise(draft, target, banned)
 
@@ -204,6 +208,8 @@ class AdversarialPersona:
                 fallback_reason=getattr(critique, "fallback_reason", None),
                 requested_slot=getattr(critique, "requested_slot", None),
                 resolved_model=getattr(critique, "resolved_model", None),
+                account_type=getattr(critique, "account_type", None),
+                failure_ledger=tuple(getattr(critique, "failure_ledger", ())),
             )
 
         findings = [f"banned phrase survived revision: '{p}'"

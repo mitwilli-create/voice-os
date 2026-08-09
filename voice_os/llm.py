@@ -1,10 +1,10 @@
 """Optional live completion client.
 
 Every stage has a deterministic offline implementation. Live work is routed
-through the provider policy and the subscription-first frontier failover chain.
+through the provider policy and the hardened subscription-first failover chain.
 
 Privacy: in live mode the draft text, target profile, banned phrases, and
-revision signals are sent to the selected calibrated provider. Set
+revision signals are sent to each attempted calibrated provider. Set
 VOICE_OS_OFFLINE=1 to force offline mode for sensitive drafts even when
 credentials are present.
 """
@@ -16,9 +16,10 @@ import sys
 
 import httpx
 
-# Mitchell's current frontier failover order is Claude subscription, ChatGPT/
-# Codex subscription, Antigravity/Gemini subscription, then Grok subscription.
-# Metered Google and xAI APIs remain later, explicitly configured fallbacks.
+# Voice OS keeps the existing approved Claude Code subscription route and the
+# sandboxed Codex subscription route. New command-line adapters stay excluded
+# until their prompt, working directory, tools, configuration, sessions, and
+# child environment are isolated. Metered APIs remain explicit fallbacks.
 DEFAULT_MODEL = os.environ.get("VOICE_OS_MODEL", "opus")
 DEFAULT_PROVIDER = os.environ.get("VOICE_OS_PROVIDER", "claude_cli")
 
@@ -45,6 +46,8 @@ class RoutedText(str):
         fallback_reason: str | None = None,
         requested_slot: str | None = None,
         resolved_model: str | None = None,
+        account_type: str | None = None,
+        failure_ledger: tuple[dict, ...] = (),
     ):
         instance = super().__new__(cls, value)
         instance.provider = provider
@@ -53,6 +56,8 @@ class RoutedText(str):
         instance.fallback_reason = fallback_reason
         instance.requested_slot = requested_slot
         instance.resolved_model = resolved_model
+        instance.account_type = account_type
+        instance.failure_ledger = failure_ledger
         return instance
 
 
@@ -91,7 +96,7 @@ def get_client():
 
 
 def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
-    """Route one live completion through the non-Anthropic provider policy.
+    """Route one live completion through the provider policy.
 
     Failures are not silent: the first live-call failure prints a warning to
     stderr so a misconfigured key or model does not quietly demote every run
@@ -114,9 +119,8 @@ def _claude_cli_adapter(request: dict) -> str:
     """Complete via the Claude Code CLI so the call bills the subscription.
 
     Mitchell ruled on 2026-08-06: use the subscription, not the metered key.
-    Every other adapter in this module spends a metered API key, Google
-    included, because the Gemini CLI stopped serving individual users on
-    2026-06-18 and left no subscription route on that vendor.
+    Other subscription adapters are separately isolated. Application
+    programming interface adapters spend metered credentials.
 
     The wrapper at ~/.claude/bin/claude unsets ANTHROPIC_API_KEY before exec,
     which is what forces the call onto subscription OAuth. We invoke that path
@@ -232,79 +236,6 @@ def _codex_cli_adapter(request: dict) -> str:
     text = _strip_codex_chrome(completed.stdout or "")
     if not text:
         raise RuntimeError("codex CLI returned empty output")
-    return text
-
-
-def _antigravity_cli_adapter(request: dict) -> str:
-    """Complete through the Antigravity/Gemini subscription CLI."""
-    import subprocess
-
-    binary = os.environ.get("VOICE_OS_ANTIGRAVITY_CLI_PATH", "agy")
-    child_env = {
-        k: v for k, v in os.environ.items()
-        if k not in {"ANTHROPIC_API_KEY", "OPENAI_API_KEY"}
-    }
-    timeout_s = int(os.environ.get("VOICE_OS_ANTIGRAVITY_CLI_TIMEOUT", "540"))
-    composed = f"{request['system']}\n\n---\n\n{request['prompt']}"
-    argv = [
-        binary,
-        "--output-format", "text",
-        "--model", request["model"],
-        "--effort", "high",
-        "--sandbox",
-        "--print", composed,
-    ]
-    try:
-        completed = subprocess.run(
-            argv, capture_output=True, text=True, timeout=timeout_s, env=child_env
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"antigravity CLI not found: {binary}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"antigravity CLI timed out after {timeout_s}s") from exc
-    if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()[-300:]
-        raise RuntimeError(f"antigravity CLI exited {completed.returncode}: {stderr}")
-    text = (completed.stdout or "").strip()
-    if not text:
-        raise RuntimeError("antigravity CLI returned empty output")
-    return text
-
-
-def _grok_cli_adapter(request: dict) -> str:
-    """Complete through the Grok subscription CLI."""
-    import subprocess
-
-    binary = os.environ.get("VOICE_OS_GROK_CLI_PATH", "grok")
-    child_env = {
-        k: v for k, v in os.environ.items()
-        if k not in {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY"}
-    }
-    timeout_s = int(os.environ.get("VOICE_OS_GROK_CLI_TIMEOUT", "540"))
-    composed = f"{request['system']}\n\n---\n\n{request['prompt']}"
-    argv = [
-        binary,
-        "--single", composed,
-        "--output-format", "plain",
-        "--model", request["model"],
-        "--no-plan",
-        "--no-subagents",
-        "--permission-mode", "plan",
-    ]
-    try:
-        completed = subprocess.run(
-            argv, capture_output=True, text=True, timeout=timeout_s, env=child_env
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"grok CLI not found: {binary}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"grok CLI timed out after {timeout_s}s") from exc
-    if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip()[-300:]
-        raise RuntimeError(f"grok CLI exited {completed.returncode}: {stderr}")
-    text = (completed.stdout or "").strip()
-    if not text:
-        raise RuntimeError("grok CLI returned empty output")
     return text
 
 
@@ -512,8 +443,6 @@ def _route_live_completion(
         adapters={
             "claude_cli": _claude_cli_adapter,
             "codex_cli": _codex_cli_adapter,
-            "antigravity_cli": _antigravity_cli_adapter,
-            "grok_cli": _grok_cli_adapter,
             "anthropic": _anthropic_adapter,
             "openai": _openai_adapter,
             "google": _google_adapter,
@@ -546,7 +475,7 @@ def _route_live_completion(
         value.strip()
         for value in os.environ.get(
             "VOICE_OS_ALLOWED_PROVIDERS",
-            "claude_cli,codex_cli,antigravity_cli,grok_cli,google,xai",
+            "claude_cli,codex_cli",
         ).split(",")
         if value.strip()
     }
@@ -557,7 +486,11 @@ def _route_live_completion(
                 "anthropic_provider_prohibited",
                 kind="policy",
             )
-    candidates = []
+    allow_degraded = os.environ.get(
+        "VOICE_OS_ALLOW_DEGRADED",
+        "",
+    ).lower() in {"1", "true", "yes", "on"}
+    candidates: list[tuple[str, str]] = []
     # Subscription ladder, Mitchell's explicit ordering on 2026-08-08:
     #   1. Fable         claude_cli:fable
     #   2. Opus          claude_cli:opus
@@ -565,10 +498,7 @@ def _route_live_completion(
     #   4. GPT-5.6 Sol   codex_cli:gpt-5.6-sol
     #   5. Terra         codex_cli:gpt-5.6-terra
     #   6. Luna          codex_cli:gpt-5.6-luna
-    #   7. Gemini Pro     antigravity_cli:gemini-3.1-pro
-    #   8. Grok 4        grok_cli:grok-4
-    #
-    # These are appended BEFORE every metered branch below, so a subscription
+    # These are appended before every metered branch below, so a subscription
     # seat is always spent before an API key. Their gate is the subscription
     # flag rather than an API key, because requiring a key here would make the
     # metered credential a precondition for the free route, which is backwards.
@@ -579,14 +509,20 @@ def _route_live_completion(
         ("codex_cli", "gpt-5.6-sol"),
         ("codex_cli", "gpt-5.6-terra"),
         ("codex_cli", "gpt-5.6-luna"),
-        ("antigravity_cli", "gemini-3.1-pro"),
-        ("grok_cli", "grok-4"),
     ):
-        if _sub_provider in allowed_providers and (_sub_provider, _sub_model) not in candidates:
+        route_plan = router.explain(provider=_sub_provider, model=_sub_model)
+        if (
+            _sub_provider in allowed_providers
+            and (allow_degraded or route_plan["outcome"] != "degraded")
+            and (_sub_provider, _sub_model) not in candidates
+        ):
             candidates.append((_sub_provider, _sub_model))
 
-    if DEFAULT_PROVIDER not in {"claude_cli", "codex_cli"}:
-        candidates.insert(0, (DEFAULT_PROVIDER, DEFAULT_MODEL))
+    if (
+        DEFAULT_PROVIDER in allowed_providers
+        and (DEFAULT_PROVIDER, DEFAULT_MODEL) not in candidates
+    ):
+        candidates.append((DEFAULT_PROVIDER, DEFAULT_MODEL))
     if (
         DEFAULT_PROVIDER == "anthropic"
         and DEFAULT_MODEL != anthropic_fallback_model
@@ -622,13 +558,6 @@ def _route_live_completion(
         for model in openrouter_fallback_models:
             if ("openrouter", model) not in candidates:
                 candidates.append(("openrouter", model))
-    subscription_enabled = os.environ.get(
-        "CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", ""
-    ).lower() in {"1", "true", "yes", "on"}
-    allow_degraded = os.environ.get(
-        "VOICE_OS_ALLOW_DEGRADED",
-        "true" if subscription_enabled else "",
-    ).lower() in {"1", "true", "yes", "on"}
     result = router.route_candidates(
         candidates=candidates,
         system=system,
@@ -645,4 +574,6 @@ def _route_live_completion(
         fallback_reason=result.fallback_reason,
         requested_slot=result.route.requested_slot or f"{result.route.provider}:{result.route.model}",
         resolved_model=result.route.resolved_model or result.route.model,
+        account_type=result.route.account_type,
+        failure_ledger=result.failure_ledger,
     )
