@@ -109,6 +109,8 @@ class PersonaResult:
     model: str | None = None
     policy_outcome: str | None = None
     fallback_reason: str | None = None
+    requested_slot: str | None = None
+    resolved_model: str | None = None
 
 
 class GenerativePersona:
@@ -140,6 +142,8 @@ class GenerativePersona:
                 model=getattr(revised, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(revised, "policy_outcome", None),
                 fallback_reason=getattr(revised, "fallback_reason", None),
+                requested_slot=getattr(revised, "requested_slot", None),
+                resolved_model=getattr(revised, "resolved_model", None),
             )
         return self._offline_revise(draft, target, banned)
 
@@ -198,6 +202,8 @@ class AdversarialPersona:
                 model=getattr(critique, "model", llm.DEFAULT_MODEL),
                 policy_outcome=getattr(critique, "policy_outcome", None),
                 fallback_reason=getattr(critique, "fallback_reason", None),
+                requested_slot=getattr(critique, "requested_slot", None),
+                resolved_model=getattr(critique, "resolved_model", None),
             )
 
         findings = [f"banned phrase survived revision: '{p}'"

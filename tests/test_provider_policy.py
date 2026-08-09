@@ -90,6 +90,31 @@ def test_default_voice_route_is_subscription_billed_not_metered():
     assert route["calibrated"] is True
 
 
+def test_gemini_compatibility_slot_exposes_current_resolution():
+    calls = []
+    router = ProviderPolicyRouter(
+        adapters={"google": lambda request: calls.append(request) or "resolved"},
+        env={"GEMINI_API_KEY": "present"},
+    )
+
+    result = router.route(
+        provider="google",
+        model="gemini-2.5-pro",
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allow_degraded=True,
+    )
+
+    explanation = router.explain(provider="google", model="gemini-2.5-pro")
+    assert result.text == "resolved"
+    assert calls[0]["model"] == "gemini-3.1-pro-preview"
+    assert calls[0]["requested_slot"] == "google:gemini-2.5-pro"
+    assert explanation["requested_slot"] == "google:gemini-2.5-pro"
+    assert explanation["resolved_model"] == "gemini-3.1-pro-preview"
+    assert explanation["compatibility_label"].startswith("COMPATIBILITY SLOT")
+
+
 def test_subscription_routes_do_not_depend_on_a_metered_api_key():
     """A subscription route must not become eligible via a metered key.
 
@@ -116,6 +141,97 @@ def test_subscription_routes_do_not_depend_on_a_metered_api_key():
     assert enabled.explain(provider="claude_cli", model="opus")[
         "credential_present"
     ] is True
+    assert enabled.explain(provider="claude_cli", model="fable")[
+        "credential_present"
+    ] is True
+
+
+def test_subscription_cascade_order_reaches_luna_before_google(monkeypatch):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def claude_adapter(request):
+        calls.append(("claude_cli", request["model"]))
+        raise CapacityError("usage limit reached")
+
+    def codex_adapter(request):
+        calls.append(("codex_cli", request["model"]))
+        if request["model"] == "gpt-5.6-luna":
+            return "CANARY_OK"
+        raise CapacityError("usage limit reached")
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "claude_cli")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "fable")
+    monkeypatch.setattr(llm, "_claude_cli_adapter", claude_adapter)
+    monkeypatch.setattr(llm, "_codex_cli_adapter", codex_adapter)
+    monkeypatch.setenv("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "true")
+    monkeypatch.setenv(
+        "VOICE_OS_ALLOWED_PROVIDERS", "claude_cli,codex_cli,google"
+    )
+    monkeypatch.delenv("VOICE_OS_ALLOW_DEGRADED", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "codex_cli"
+    assert result.model == "gpt-5.6-luna"
+    assert calls == [
+        ("claude_cli", "fable"),
+        ("claude_cli", "opus"),
+        ("claude_cli", "sonnet"),
+        ("codex_cli", "gpt-5.6-sol"),
+        ("codex_cli", "gpt-5.6-terra"),
+        ("codex_cli", "gpt-5.6-luna"),
+    ]
+
+
+def test_subscription_cascade_reaches_antigravity_then_grok(monkeypatch):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def failing_adapter(provider):
+        def adapter(request):
+            calls.append((provider, request["model"]))
+            raise CapacityError("weekly limit reached")
+        return adapter
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "claude_cli")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "fable")
+    monkeypatch.setattr(llm, "_claude_cli_adapter", failing_adapter("claude_cli"))
+    monkeypatch.setattr(llm, "_codex_cli_adapter", failing_adapter("codex_cli"))
+    monkeypatch.setattr(llm, "_antigravity_cli_adapter", failing_adapter("antigravity_cli"))
+    monkeypatch.setattr(llm, "_grok_cli_adapter", lambda request: calls.append(("grok_cli", request["model"])) or "CANARY_OK")
+    monkeypatch.setenv("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "true")
+    monkeypatch.setenv(
+        "VOICE_OS_ALLOWED_PROVIDERS",
+        "claude_cli,codex_cli,antigravity_cli,grok_cli,google,xai",
+    )
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "grok_cli"
+    assert result.model == "grok-4"
+    assert calls[-1] == ("grok_cli", "grok-4")
+    assert [provider for provider, _ in calls] == [
+        "claude_cli", "claude_cli", "claude_cli",
+        "codex_cli", "codex_cli", "codex_cli",
+        "antigravity_cli", "grok_cli",
+    ]
 
 
 def test_anthropic_requires_explicit_compatibility_opt_in():
@@ -461,6 +577,41 @@ def test_provider_failure_never_silently_becomes_offline():
             prompt="draft",
             max_tokens=100,
         )
+
+
+def test_cli_exit_failure_advances_subscription_ladder():
+    calls = []
+
+    def claude(_request):
+        calls.append("claude")
+        raise RuntimeError("claude CLI exited 1: plan limit reached")
+
+    def codex(_request):
+        calls.append("codex")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude, "codex_cli": codex},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("claude_cli", "fable"),
+            ("claude_cli", "opus"),
+            ("codex_cli", "gpt-5.6-sol"),
+        ],
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allow_degraded=True,
+        allowed_providers={"claude_cli", "codex_cli"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.route.provider == "codex_cli"
+    assert calls == ["claude", "claude", "codex"]
+
 
 def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
     calls = []

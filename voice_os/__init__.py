@@ -112,6 +112,8 @@ def run_cycles(
                 route = {
                     "provider": persona_result.provider,
                     "model": persona_result.model,
+                    "requested_slot": persona_result.requested_slot,
+                    "resolved_model": persona_result.resolved_model or persona_result.model,
                 }
                 if persona_result.policy_outcome:
                     route["policy_outcome"] = persona_result.policy_outcome

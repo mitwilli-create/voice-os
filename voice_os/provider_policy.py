@@ -19,6 +19,9 @@ class ProviderRoute:
     provider: str
     model: str
     outcome: str
+    requested_slot: str | None = None
+    resolved_model: str | None = None
+    compatibility_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,14 @@ class ProviderPolicyHardStop(RuntimeError):
 
 
 CALIBRATED_ROUTES = {
+    # Subscription-billed Fable, added 2026-08-07 on Mitchell's ruling: "use the
+    # subscription, not the metered key". It is the first seat in the explicit
+    # cascade, followed by Opus, Sonnet, Sol, Terra, Luna, then Gemini.
+    ("claude_cli", "fable"): ProviderRoute(
+        provider="claude_cli",
+        model="fable",
+        outcome="equivalent",
+    ),
     # Subscription-billed Opus, added 2026-08-06 on Mitchell's ruling: "use the
     # subscription, not the metered key". It is listed FIRST because it is the
     # only route in this table that costs nothing at the margin. Every other
@@ -99,6 +110,20 @@ CALIBRATED_ROUTES = {
         model="gpt-5.6-luna",
         outcome="degraded",
     ),
+    ("antigravity_cli", "gemini-3.1-pro"): ProviderRoute(
+        provider="antigravity_cli",
+        model="gemini-3.1-pro",
+        outcome="degraded",
+        requested_slot="antigravity_cli:gemini-3.1-pro",
+        resolved_model="gemini-3.1-pro",
+    ),
+    ("grok_cli", "grok-4"): ProviderRoute(
+        provider="grok_cli",
+        model="grok-4",
+        outcome="degraded",
+        requested_slot="grok_cli:grok-4",
+        resolved_model="grok-4",
+    ),
     ("anthropic", "claude-fable-5"): ProviderRoute(
         provider="anthropic",
         model="claude-fable-5",
@@ -114,10 +139,45 @@ CALIBRATED_ROUTES = {
         model="gpt-5.6-sol",
         outcome="degraded",
     ),
+    ("google", "gemini-3.1-pro"): ProviderRoute(
+        provider="google",
+        model="gemini-3.1-pro",
+        outcome="degraded",
+        requested_slot="google:gemini-3.1-pro",
+        resolved_model="gemini-3.1-pro-preview",
+    ),
     ("google", "gemini-3.6-flash"): ProviderRoute(
         provider="google",
         model="gemini-3.6-flash",
         outcome="degraded",
+        requested_slot="google:gemini-3.6-flash",
+        resolved_model="gemini-3.6-flash",
+    ),
+    # Compatibility slots. Keep them callable for older configuration, but
+    # route the adapter to the current model and expose the distinction.
+    ("google", "gemini-2.5-pro"): ProviderRoute(
+        provider="google",
+        model="gemini-2.5-pro",
+        outcome="degraded",
+        requested_slot="google:gemini-2.5-pro",
+        resolved_model="gemini-3.1-pro-preview",
+        compatibility_label="COMPATIBILITY SLOT: current Gemini 3.1 Pro Preview",
+    ),
+    ("google", "gemini-3-flash"): ProviderRoute(
+        provider="google",
+        model="gemini-3-flash",
+        outcome="degraded",
+        requested_slot="google:gemini-3-flash",
+        resolved_model="gemini-3.6-flash",
+        compatibility_label="COMPATIBILITY SLOT: current stable Gemini 3.6 Flash",
+    ),
+    ("google", "gemini-2.5-flash"): ProviderRoute(
+        provider="google",
+        model="gemini-2.5-flash",
+        outcome="degraded",
+        requested_slot="google:gemini-2.5-flash",
+        resolved_model="gemini-3.6-flash",
+        compatibility_label="COMPATIBILITY SLOT: current stable Gemini 3.6 Flash",
     ),
     ("xai", "grok-4.5"): ProviderRoute(
         provider="xai",
@@ -159,6 +219,8 @@ _CREDENTIAL_KEYS = {
     # metered key while reporting itself as a subscription call.
     "claude_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "CLAUDE_CODE_OAUTH_TOKEN"),
     "codex_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "CODEX_OAUTH_TOKEN"),
+    "antigravity_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "ANTIGRAVITY_OAUTH_TOKEN"),
+    "grok_cli": ("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "GROK_OAUTH_TOKEN"),
     "anthropic": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
     "openai": ("OPENAI_API_KEY",),
     "google": ("GEMINI_API_KEY",),
@@ -174,11 +236,19 @@ def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
         response = getattr(exc, "response", None)
         status = getattr(response, "status_code", None)
     signal = f"{type(exc).__name__} {exc}".lower()
+    # CLI adapters report provider-side failures as RuntimeError because the
+    # subprocess has no HTTP status to attach. Treat an exit, timeout, or
+    # missing wrapper as retryable so the subscription ladder can advance to
+    # the next seat instead of stopping at provider_unknown.
+    if any(marker in signal for marker in ("cli exited", "cli timed out", "cli wrapper not found", "cli not found")):
+        return "unavailable", True
     if "refusal" in signal or "refused" in signal:
         return "refusal", True
     if (
         status in {402, 429}
         or "usage limit" in signal
+        or "weekly limit" in signal
+        or "plan limit" in signal
         or "rate limit" in signal
         or "quota" in signal
     ):
@@ -237,6 +307,8 @@ class ProviderPolicyRouter:
             return {
                 "provider": provider,
                 "model": model,
+                "requested_slot": f"{provider}:{model}",
+                "resolved_model": None,
                 "outcome": "hard_stop",
                 "reason": "not_calibrated",
                 "calibrated": False,
@@ -247,6 +319,9 @@ class ProviderPolicyRouter:
         return {
             "provider": provider,
             "model": model,
+            "requested_slot": route.requested_slot or f"{provider}:{model}",
+            "resolved_model": route.resolved_model or model,
+            "compatibility_label": route.compatibility_label,
             "outcome": route.outcome,
             "reason": reason,
             "calibrated": True,
@@ -301,11 +376,16 @@ class ProviderPolicyRouter:
                 f"provider route {provider}:{model} has no adapter"
             )
 
+        route = self.registry[(provider, model)]
+        requested_slot = route.requested_slot or f"{provider}:{model}"
+        resolved_model = route.resolved_model or model
         try:
             text = adapter(
                 {
                     "provider": provider,
-                    "model": model,
+                    "model": resolved_model,
+                    "requested_slot": requested_slot,
+                    "resolved_model": resolved_model,
                     "system": system,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
@@ -327,7 +407,6 @@ class ProviderPolicyRouter:
                 kind="malformed_response",
                 retryable=True,
             )
-        route = self.registry[(provider, model)]
         return CompletionResult(text=text.strip(), route=route)
 
     def route_candidates(
