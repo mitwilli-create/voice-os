@@ -22,7 +22,7 @@ reviews:
   related_issues: false
   related_prs: false
   auto_review:
-    enabled: true
+    enabled: false
     drafts: false
   path_filters:
     # machine-generated / build outputs — review adds nothing
