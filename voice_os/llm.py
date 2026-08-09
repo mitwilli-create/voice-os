@@ -1,11 +1,10 @@
 """Optional live completion client.
 
 Every stage has a deterministic offline implementation. Live work is routed
-through the provider policy, with Gemini as the default high-stakes writing
-lane and open-weight models available for toil and triage work.
+through the provider policy and the hardened subscription-first failover chain.
 
 Privacy: in live mode the draft text, target profile, banned phrases, and
-revision signals are sent to the selected calibrated provider. Set
+revision signals are sent to each attempted calibrated provider. Set
 VOICE_OS_OFFLINE=1 to force offline mode for sensitive drafts even when
 credentials are present.
 """
@@ -17,23 +16,10 @@ import sys
 
 import httpx
 
-# Mitchell ruled 2026-08-06: Claude subscription primary, OpenAI subscription
-# secondary, Google deprecated for this pipeline altogether.
-#
-# Google is out on TWO independent grounds, either of which is sufficient:
-#   1. BILLING. GEMINI_API_KEY is metered. The gemini CLI returns
-#      IneligibleTierError for individuals since 2026-06-18, so the only
-#      remaining Gemini route is the billed API.
-#   2. OUTPUT CONTAMINATION. Its replacement, the Antigravity CLI (agy), IS
-#      authed oauth-personal and would have satisfied the billing rule, but it
-#      auto-loads ~/.gemini/GEMINI.md into every reply. Measured 2026-08-06:
-#      test completions came back carrying Mitchell's personal global rules,
-#      including a telemetry footer and a "Next action:" line. Setting
-#      GEMINI_MD_FILENAME to a nonexistent file did NOT suppress it. This
-#      pipeline parses structured output, so that bleed is a live cause of
-#      "unparseable response" failures, not a cosmetic issue.
-#
-# Both defaults below are subscription routes that cost nothing at the margin.
+# Voice OS keeps the existing approved Claude Code subscription route and the
+# sandboxed Codex subscription route. New command-line adapters stay excluded
+# until their prompt, working directory, tools, configuration, sessions, and
+# child environment are isolated. Metered APIs remain explicit fallbacks.
 DEFAULT_MODEL = os.environ.get("VOICE_OS_MODEL", "opus")
 DEFAULT_PROVIDER = os.environ.get("VOICE_OS_PROVIDER", "claude_cli")
 
@@ -58,12 +44,20 @@ class RoutedText(str):
         model: str,
         policy_outcome: str,
         fallback_reason: str | None = None,
+        requested_slot: str | None = None,
+        resolved_model: str | None = None,
+        account_type: str | None = None,
+        failure_ledger: tuple[dict, ...] = (),
     ):
         instance = super().__new__(cls, value)
         instance.provider = provider
         instance.model = model
         instance.policy_outcome = policy_outcome
         instance.fallback_reason = fallback_reason
+        instance.requested_slot = requested_slot
+        instance.resolved_model = resolved_model
+        instance.account_type = account_type
+        instance.failure_ledger = failure_ledger
         return instance
 
 
@@ -102,7 +96,7 @@ def get_client():
 
 
 def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
-    """Route one live completion through the non-Anthropic provider policy.
+    """Route one live completion through the provider policy.
 
     Failures are not silent: the first live-call failure prints a warning to
     stderr so a misconfigured key or model does not quietly demote every run
@@ -125,9 +119,8 @@ def _claude_cli_adapter(request: dict) -> str:
     """Complete via the Claude Code CLI so the call bills the subscription.
 
     Mitchell ruled on 2026-08-06: use the subscription, not the metered key.
-    Every other adapter in this module spends a metered API key, Google
-    included, because the Gemini CLI stopped serving individual users on
-    2026-06-18 and left no subscription route on that vendor.
+    Other subscription adapters are separately isolated. Application
+    programming interface adapters spend metered credentials.
 
     The wrapper at ~/.claude/bin/claude unsets ANTHROPIC_API_KEY before exec,
     which is what forces the call onto subscription OAuth. We invoke that path
@@ -148,7 +141,10 @@ def _claude_cli_adapter(request: dict) -> str:
 
     child_env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
 
-    timeout_s = int(os.environ.get("VOICE_OS_CLAUDE_CLI_TIMEOUT", "540"))
+    # The parent Voice OS gate has a 300-second ceiling. Keep one seat bounded
+    # so a hung plan-limit response cannot consume the whole ceiling before
+    # Fable, Opus, Sonnet, Sol, Terra, and Luna have each been tried.
+    timeout_s = int(os.environ.get("VOICE_OS_CLAUDE_CLI_TIMEOUT", "45"))
     argv = [
         wrapper,
         "-p",
@@ -479,7 +475,7 @@ def _route_live_completion(
         value.strip()
         for value in os.environ.get(
             "VOICE_OS_ALLOWED_PROVIDERS",
-            DEFAULT_PROVIDER,
+            "claude_cli,codex_cli",
         ).split(",")
         if value.strip()
     }
@@ -490,30 +486,43 @@ def _route_live_completion(
                 "anthropic_provider_prohibited",
                 kind="policy",
             )
-    candidates = [(DEFAULT_PROVIDER, DEFAULT_MODEL)]
-    # Subscription ladder, Mitchell's explicit ordering on 2026-08-06:
-    #   1. Opus 5        claude_cli:opus        (the DEFAULT above)
-    #   2. GPT-5.6 Sol   codex_cli:gpt-5.6-sol
-    #   3. Sonnet 5      claude_cli:sonnet
-    #   4. Terra         codex_cli:gpt-5.6-terra
-    #   5. Luna          codex_cli:gpt-5.6-luna
-    #
-    # These are appended BEFORE every metered branch below, so a subscription
+    allow_degraded = os.environ.get(
+        "VOICE_OS_ALLOW_DEGRADED",
+        "",
+    ).lower() in {"1", "true", "yes", "on"}
+    candidates: list[tuple[str, str]] = []
+    # Subscription ladder, Mitchell's explicit ordering on 2026-08-08:
+    #   1. Fable         claude_cli:fable
+    #   2. Opus          claude_cli:opus
+    #   3. Sonnet        claude_cli:sonnet
+    #   4. GPT-5.6 Sol   codex_cli:gpt-5.6-sol
+    #   5. Terra         codex_cli:gpt-5.6-terra
+    #   6. Luna          codex_cli:gpt-5.6-luna
+    # These are appended before every metered branch below, so a subscription
     # seat is always spent before an API key. Their gate is the subscription
     # flag rather than an API key, because requiring a key here would make the
     # metered credential a precondition for the free route, which is backwards.
     for _sub_provider, _sub_model in (
-        ("codex_cli", "gpt-5.6-sol"),
+        ("claude_cli", "fable"),
+        ("claude_cli", "opus"),
         ("claude_cli", "sonnet"),
+        ("codex_cli", "gpt-5.6-sol"),
         ("codex_cli", "gpt-5.6-terra"),
         ("codex_cli", "gpt-5.6-luna"),
     ):
+        route_plan = router.explain(provider=_sub_provider, model=_sub_model)
         if (
-            (_sub_provider, _sub_model) != (DEFAULT_PROVIDER, DEFAULT_MODEL)
-            and _sub_provider in allowed_providers
+            _sub_provider in allowed_providers
+            and (allow_degraded or route_plan["outcome"] != "degraded")
             and (_sub_provider, _sub_model) not in candidates
         ):
             candidates.append((_sub_provider, _sub_model))
+
+    if (
+        DEFAULT_PROVIDER in allowed_providers
+        and (DEFAULT_PROVIDER, DEFAULT_MODEL) not in candidates
+    ):
+        candidates.append((DEFAULT_PROVIDER, DEFAULT_MODEL))
     if (
         DEFAULT_PROVIDER == "anthropic"
         and DEFAULT_MODEL != anthropic_fallback_model
@@ -549,10 +558,6 @@ def _route_live_completion(
         for model in openrouter_fallback_models:
             if ("openrouter", model) not in candidates:
                 candidates.append(("openrouter", model))
-    allow_degraded = os.environ.get(
-        "VOICE_OS_ALLOW_DEGRADED",
-        "",
-    ).lower() in {"1", "true", "yes", "on"}
     result = router.route_candidates(
         candidates=candidates,
         system=system,
@@ -564,7 +569,11 @@ def _route_live_completion(
     return RoutedText(
         result.text,
         provider=result.route.provider,
-        model=result.route.model,
+        model=result.route.resolved_model or result.route.model,
         policy_outcome=result.route.outcome,
         fallback_reason=result.fallback_reason,
+        requested_slot=result.route.requested_slot or f"{result.route.provider}:{result.route.model}",
+        resolved_model=result.route.resolved_model or result.route.model,
+        account_type=result.route.account_type,
+        failure_ledger=result.failure_ledger,
     )

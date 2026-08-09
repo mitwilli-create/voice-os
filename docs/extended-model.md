@@ -232,7 +232,7 @@ miners (train only) and eval (holdout only).
 
 ## Sequencing and decisions log
 
-Implementation lands as green-test PRs, each merged after a clean Qodo review:
+Implementation lands as green-test PRs after the local QA gates pass:
 
 - PR A: this design doc.
 - PR B: foundations (contexts, tone, holdout, extended calibration and gate,
@@ -246,7 +246,7 @@ Decisions (Mitchell, 2026-07-07):
 
 - Plan approval served as the design approval gate; implementation proceeds
   without a second pause.
-- Each PR runs the Qodo review loop until the verdict reads Bugs (0), then merges.
+- Each PR runs repository tests, static checks, a diff check, and a local review skill before merge.
 - API spend approved for the generated contrast corpus.
 - Step 0 ingestion covered email and messages sources before mining work.
 

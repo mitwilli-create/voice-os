@@ -8,6 +8,7 @@ from voice_os import _last_provider_route
 from voice_os import llm
 from voice_os.personas import GenerativePersona, PersonaResult
 from voice_os.product.graph import _stamp_live_model
+from voice_os.product.state import build_result
 from voice_os.provider_policy import (
     CompletionResult,
     ProviderPolicyHardStop,
@@ -52,6 +53,7 @@ def test_default_openweight_route_is_available_for_toil():
         provider="openrouter",
         model="openai/gpt-oss-120b",
         outcome="degraded",
+        account_type="metered_api",
     )
     assert len(calls) == 1
 
@@ -90,6 +92,31 @@ def test_default_voice_route_is_subscription_billed_not_metered():
     assert route["calibrated"] is True
 
 
+def test_gemini_compatibility_slot_exposes_current_resolution():
+    calls = []
+    router = ProviderPolicyRouter(
+        adapters={"google": lambda request: calls.append(request) or "resolved"},
+        env={"GEMINI_API_KEY": "present"},
+    )
+
+    result = router.route(
+        provider="google",
+        model="gemini-2.5-pro",
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allow_degraded=True,
+    )
+
+    explanation = router.explain(provider="google", model="gemini-2.5-pro")
+    assert result.text == "resolved"
+    assert calls[0]["model"] == "gemini-3.1-pro-preview"
+    assert calls[0]["requested_slot"] == "google:gemini-2.5-pro"
+    assert explanation["requested_slot"] == "google:gemini-2.5-pro"
+    assert explanation["resolved_model"] == "gemini-3.1-pro-preview"
+    assert explanation["compatibility_label"].startswith("COMPATIBILITY SLOT")
+
+
 def test_subscription_routes_do_not_depend_on_a_metered_api_key():
     """A subscription route must not become eligible via a metered key.
 
@@ -116,6 +143,157 @@ def test_subscription_routes_do_not_depend_on_a_metered_api_key():
     assert enabled.explain(provider="claude_cli", model="opus")[
         "credential_present"
     ] is True
+    assert enabled.explain(provider="claude_cli", model="fable")[
+        "credential_present"
+    ] is True
+
+
+def test_subscription_cascade_order_reaches_luna_before_google(monkeypatch):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def claude_adapter(request):
+        calls.append(("claude_cli", request["model"]))
+        raise CapacityError("usage limit reached")
+
+    def codex_adapter(request):
+        calls.append(("codex_cli", request["model"]))
+        if request["model"] == "gpt-5.6-luna":
+            return "CANARY_OK"
+        raise CapacityError("usage limit reached")
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "claude_cli")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "fable")
+    monkeypatch.setattr(llm, "_claude_cli_adapter", claude_adapter)
+    monkeypatch.setattr(llm, "_codex_cli_adapter", codex_adapter)
+    monkeypatch.setenv("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "true")
+    monkeypatch.setenv(
+        "VOICE_OS_ALLOWED_PROVIDERS", "claude_cli,codex_cli,google"
+    )
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "codex_cli"
+    assert result.model == "gpt-5.6-luna"
+    assert calls == [
+        ("claude_cli", "fable"),
+        ("claude_cli", "opus"),
+        ("claude_cli", "sonnet"),
+        ("codex_cli", "gpt-5.6-sol"),
+        ("codex_cli", "gpt-5.6-terra"),
+        ("codex_cli", "gpt-5.6-luna"),
+    ]
+
+
+def test_subscription_seats_run_before_a_metered_default(monkeypatch):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def failing_adapter(provider):
+        def adapter(request):
+            calls.append((provider, request["model"]))
+            raise CapacityError("usage limit reached")
+        return adapter
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "google")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "gemini-3.6-flash")
+    monkeypatch.setattr(llm, "_claude_cli_adapter", failing_adapter("claude_cli"))
+    monkeypatch.setattr(llm, "_codex_cli_adapter", failing_adapter("codex_cli"))
+    monkeypatch.setattr(
+        llm,
+        "_google_adapter",
+        lambda request: calls.append(("google", request["model"])) or "CANARY_OK",
+    )
+    monkeypatch.setenv("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "true")
+    monkeypatch.setenv(
+        "VOICE_OS_ALLOWED_PROVIDERS",
+        "claude_cli,codex_cli,google",
+    )
+    monkeypatch.setenv("GEMINI_API_KEY", "present")
+    monkeypatch.setenv("VOICE_OS_ALLOW_DEGRADED", "true")
+
+    result = llm._route_live_completion(
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+    )
+
+    assert result == "CANARY_OK"
+    assert result.provider == "google"
+    assert result.account_type == "metered_api"
+    assert [entry["requested_slot"] for entry in result.failure_ledger] == [
+        "claude_cli:fable",
+        "claude_cli:opus",
+        "claude_cli:sonnet",
+        "codex_cli:gpt-5.6-sol",
+        "codex_cli:gpt-5.6-terra",
+        "codex_cli:gpt-5.6-luna",
+    ]
+    assert calls == [
+        ("claude_cli", "fable"),
+        ("claude_cli", "opus"),
+        ("claude_cli", "sonnet"),
+        ("codex_cli", "gpt-5.6-sol"),
+        ("codex_cli", "gpt-5.6-terra"),
+        ("codex_cli", "gpt-5.6-luna"),
+        ("google", "gemini-3.6-flash"),
+    ]
+
+
+def test_subscription_enablement_does_not_implicitly_allow_degraded_routes(
+    monkeypatch,
+):
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def claude_adapter(request):
+        calls.append(request["model"])
+        if request["model"] in {"fable", "opus"}:
+            raise CapacityError("usage limit reached")
+        return "MUST_NOT_RUN"
+
+    monkeypatch.setattr(llm, "DEFAULT_PROVIDER", "claude_cli")
+    monkeypatch.setattr(llm, "DEFAULT_MODEL", "fable")
+    monkeypatch.setattr(llm, "_claude_cli_adapter", claude_adapter)
+    monkeypatch.setenv("CAREER_OPS_SUBSCRIPTION_CLI_ENABLED", "true")
+    monkeypatch.setenv("VOICE_OS_ALLOWED_PROVIDERS", "claude_cli")
+    monkeypatch.delenv("VOICE_OS_ALLOW_DEGRADED", raising=False)
+
+    with pytest.raises(
+        ProviderPolicyHardStop,
+        match="provider failed: provider_rate_quota",
+    ):
+        llm._route_live_completion(
+            system="system",
+            prompt="synthetic draft",
+            max_tokens=16,
+        )
+
+    assert calls == ["fable", "opus"]
+
+
+def test_unisolated_subscription_adapters_are_not_shippable_routes():
+    from voice_os.provider_policy import CALIBRATED_ROUTES
+
+    assert not hasattr(llm, "_antigravity_cli_adapter")
+    assert not hasattr(llm, "_grok_cli_adapter")
+    assert not any(
+        provider in {"antigravity_cli", "grok_cli"}
+        for provider, _model in CALIBRATED_ROUTES
+    )
 
 
 def test_anthropic_requires_explicit_compatibility_opt_in():
@@ -462,6 +640,119 @@ def test_provider_failure_never_silently_becomes_offline():
             max_tokens=100,
         )
 
+
+def test_cli_exit_failure_advances_subscription_ladder():
+    calls = []
+
+    def claude(_request):
+        calls.append("claude")
+        raise RuntimeError("claude CLI exited 1: plan limit reached")
+
+    def codex(_request):
+        calls.append("codex")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude, "codex_cli": codex},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("claude_cli", "fable"),
+            ("claude_cli", "opus"),
+            ("codex_cli", "gpt-5.6-sol"),
+        ],
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allow_degraded=True,
+        allowed_providers={"claude_cli", "codex_cli"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.route.provider == "codex_cli"
+    assert [entry["reason"] for entry in result.failure_ledger] == [
+        "provider_rate_quota",
+        "provider_rate_quota",
+    ]
+    assert calls == ["claude", "claude", "codex"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        type("UnauthorizedError", (RuntimeError,), {"status_code": 401})(
+            "unauthorized"
+        ),
+        RuntimeError("claude CLI exited 1: authentication failed"),
+    ],
+)
+def test_credential_failure_advances_with_an_exact_bounded_reason(failure):
+    calls = []
+
+    def claude(request):
+        calls.append(request["model"])
+        if request["model"] == "fable":
+            raise failure
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+    result = router.route_candidates(
+        candidates=[("claude_cli", "fable"), ("claude_cli", "opus")],
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allowed_providers={"claude_cli"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert result.fallback_reason == "provider_credential"
+    assert result.failure_ledger[0]["reason"] == "provider_credential"
+    assert calls == ["fable", "opus"]
+
+
+def test_authorization_failure_hard_stops_without_calling_a_fallback():
+    calls = []
+
+    class ForbiddenError(RuntimeError):
+        status_code = 403
+
+    def claude(_request):
+        calls.append("claude")
+        raise ForbiddenError("forbidden")
+
+    def codex(_request):
+        calls.append("codex")
+        return "MUST_NOT_RUN"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude, "codex_cli": codex},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+
+    with pytest.raises(
+        ProviderPolicyHardStop,
+        match="provider_authorization",
+    ):
+        router.route_candidates(
+            candidates=[
+                ("claude_cli", "fable"),
+                ("codex_cli", "gpt-5.6-sol"),
+            ],
+            system="system",
+            prompt="draft",
+            max_tokens=100,
+            allow_degraded=True,
+            allowed_providers={"claude_cli", "codex_cli"},
+        )
+
+    assert calls == ["claude"]
+
+
 def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
     calls = []
 
@@ -503,10 +794,125 @@ def test_retryable_capacity_failure_uses_explicitly_allowed_degraded_fallback():
             provider="openai",
             model="gpt-5.6-sol",
             outcome="degraded",
+            account_type="metered_api",
         ),
         fallback_reason="provider_rate_quota",
+        failure_ledger=(
+            {
+                "requested_slot": "anthropic:claude-opus-4-8",
+                "provider": "anthropic",
+                "resolved_model": "claude-opus-4-8",
+                "account_type": "metered_api",
+                "reason": "provider_rate_quota",
+                "retryable": True,
+            },
+        ),
     )
     assert calls == ["anthropic", "openai"]
+
+
+def test_fallback_result_carries_account_type_and_full_safe_failure_ledger():
+    calls = []
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def claude(request):
+        calls.append(request["requested_slot"])
+        raise CapacityError("usage limit reached with private diagnostic text")
+
+    def codex(request):
+        calls.append(request["requested_slot"])
+        raise RuntimeError("codex CLI timed out after 45s")
+
+    def google(request):
+        calls.append(request["requested_slot"])
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={
+            "claude_cli": claude,
+            "codex_cli": codex,
+            "google": google,
+        },
+        env={
+            "CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true",
+            "GEMINI_API_KEY": "present",
+        },
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("claude_cli", "fable"),
+            ("codex_cli", "gpt-5.6-sol"),
+            ("google", "gemini-3.6-flash"),
+        ],
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allow_degraded=True,
+        allowed_providers={"claude_cli", "codex_cli", "google"},
+    )
+
+    assert result.route.account_type == "metered_api"
+    assert result.fallback_reason == "provider_timeout"
+    assert result.failure_ledger == (
+        {
+            "requested_slot": "claude_cli:fable",
+            "provider": "claude_cli",
+            "resolved_model": "fable",
+            "account_type": "subscription",
+            "reason": "provider_rate_quota",
+            "retryable": True,
+        },
+        {
+            "requested_slot": "codex_cli:gpt-5.6-sol",
+            "provider": "codex_cli",
+            "resolved_model": "gpt-5.6-sol",
+            "account_type": "subscription",
+            "reason": "provider_timeout",
+            "retryable": True,
+        },
+    )
+    assert "private diagnostic text" not in repr(result.failure_ledger)
+    assert calls == [
+        "claude_cli:fable",
+        "codex_cli:gpt-5.6-sol",
+        "google:gemini-3.6-flash",
+    ]
+
+
+def test_failure_ledger_has_a_fixed_upper_bound():
+    attempts = 0
+
+    class CapacityError(RuntimeError):
+        status_code = 429
+
+    def claude(_request):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 18:
+            raise CapacityError("usage limit reached")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude},
+        env={"CAREER_OPS_SUBSCRIPTION_CLI_ENABLED": "true"},
+    )
+    result = router.route_candidates(
+        candidates=[("claude_cli", "fable")] * 19,
+        system="system",
+        prompt="synthetic draft",
+        max_tokens=16,
+        allowed_providers={"claude_cli"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert len(result.failure_ledger) == 16
+    assert all(
+        entry["reason"] == "provider_rate_quota"
+        for entry in result.failure_ledger
+    )
 
 
 def test_anthropic_credit_balance_400_uses_explicitly_allowed_fallback():
@@ -917,9 +1323,22 @@ def test_explain_is_deterministic_and_calls_no_adapter():
 def test_llm_routed_text_provenance_reaches_persona(monkeypatch):
     routed = llm.RoutedText(
         "Revised text.",
-        provider="anthropic",
-        model="claude-opus-4-8",
+        provider="codex_cli",
+        model="gpt-5.6-sol",
         policy_outcome="equivalent",
+        requested_slot="codex_cli:gpt-5.6-sol",
+        resolved_model="gpt-5.6-sol",
+        account_type="subscription",
+        failure_ledger=(
+            {
+                "requested_slot": "claude_cli:fable",
+                "provider": "claude_cli",
+                "resolved_model": "fable",
+                "account_type": "subscription",
+                "reason": "provider_rate_quota",
+                "retryable": True,
+            },
+        ),
     )
     monkeypatch.setattr(llm, "complete", lambda *args, **kwargs: routed)
     target = {
@@ -934,9 +1353,13 @@ def test_llm_routed_text_provenance_reaches_persona(monkeypatch):
     result = GenerativePersona().revise("Draft.", target, [], [])
 
     assert result.mode == "live"
-    assert result.provider == "anthropic"
-    assert result.model == "claude-opus-4-8"
+    assert result.provider == "codex_cli"
+    assert result.model == "gpt-5.6-sol"
     assert result.policy_outcome == "equivalent"
+    assert result.requested_slot == "codex_cli:gpt-5.6-sol"
+    assert result.resolved_model == "gpt-5.6-sol"
+    assert result.account_type == "subscription"
+    assert result.failure_ledger[0]["requested_slot"] == "claude_cli:fable"
 
 
 def test_plain_text_completion_records_non_anthropic_default_provider(
@@ -973,6 +1396,19 @@ def test_live_route_stamps_checkpoint_provenance():
         model="gpt-5.6-sol",
         policy_outcome="degraded",
         fallback_reason="provider_rate_quota",
+        requested_slot="openai:gpt-5.6-sol",
+        resolved_model="gpt-5.6-sol",
+        account_type="metered_api",
+        failure_ledger=(
+            {
+                "requested_slot": "claude_cli:fable",
+                "provider": "claude_cli",
+                "resolved_model": "fable",
+                "account_type": "subscription",
+                "reason": "provider_rate_quota",
+                "retryable": True,
+            },
+        ),
     )
 
     update = _stamp_live_model(state, result)
@@ -982,9 +1418,27 @@ def test_live_route_stamps_checkpoint_provenance():
         "live_model": "gpt-5.6-sol",
         "provider": "openai",
         "model": "gpt-5.6-sol",
+        "requested_slot": "openai:gpt-5.6-sol",
+        "resolved_model": "gpt-5.6-sol",
+        "account_type": "metered_api",
         "policy_outcome": "degraded",
         "fallback_reason": "provider_rate_quota",
+        "failure_ledger": [
+            {
+                "requested_slot": "claude_cli:fable",
+                "provider": "claude_cli",
+                "resolved_model": "fable",
+                "account_type": "subscription",
+                "reason": "provider_rate_quota",
+                "retryable": True,
+            },
+        ],
     }
+    envelope = build_result(
+        {"provenance": update["provenance"]},
+        "run-provider-provenance",
+    )
+    assert envelope["provenance"] == update["provenance"]
 
 
 def test_unrouted_live_call_clears_stale_policy_outcome():

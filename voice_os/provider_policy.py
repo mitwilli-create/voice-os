@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 OUTCOMES = ("equivalent", "degraded", "hard_stop")
+ACCOUNT_TYPES = ("subscription", "metered_api")
+FAILURE_LEDGER_MAX = 16
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,10 @@ class ProviderRoute:
     provider: str
     model: str
     outcome: str
+    account_type: str | None = None
+    requested_slot: str | None = None
+    resolved_model: str | None = None
+    compatibility_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +32,7 @@ class CompletionResult:
     text: str
     route: ProviderRoute
     fallback_reason: str | None = None
+    failure_ledger: tuple[dict, ...] = ()
 
 
 class ProviderPolicyHardStop(RuntimeError):
@@ -38,6 +45,15 @@ class ProviderPolicyHardStop(RuntimeError):
 
 
 CALIBRATED_ROUTES = {
+    # Subscription-billed Fable, added 2026-08-07 on Mitchell's ruling: "use the
+    # subscription, not the metered key". It is the first seat in the explicit
+    # cascade, followed by Opus, Sonnet, Sol, Terra, and Luna.
+    ("claude_cli", "fable"): ProviderRoute(
+        provider="claude_cli",
+        model="fable",
+        outcome="equivalent",
+        account_type="subscription",
+    ),
     # Subscription-billed Opus, added 2026-08-06 on Mitchell's ruling: "use the
     # subscription, not the metered key". It is listed FIRST because it is the
     # only route in this table that costs nothing at the margin. Every other
@@ -56,6 +72,7 @@ CALIBRATED_ROUTES = {
         provider="claude_cli",
         model="opus",
         outcome="equivalent",
+        account_type="subscription",
     ),
     # SECONDARY subscription route, same ruling. Billed to the ChatGPT
     # subscription via ~/.codex/auth.json auth_mode "chatgpt". Marked
@@ -67,6 +84,7 @@ CALIBRATED_ROUTES = {
         provider="codex_cli",
         model="gpt-5.6-sol",
         outcome="degraded",
+        account_type="subscription",
     ),
     # THIRD, same subscription and same wrapper as claude_cli:opus, just a
     # smaller model. "sonnet" is a verified alias of the claude CLI, which
@@ -75,6 +93,7 @@ CALIBRATED_ROUTES = {
         provider="claude_cli",
         model="sonnet",
         outcome="degraded",
+        account_type="subscription",
     ),
     # FOURTH. GPT-5.6 Terra, the balanced middle tier of the same family,
     # added 2026-08-06 on Mitchell's request after the Sol/Terra/Luna family
@@ -86,6 +105,7 @@ CALIBRATED_ROUTES = {
         provider="codex_cli",
         model="gpt-5.6-terra",
         outcome="degraded",
+        account_type="subscription",
     ),
     # FIFTH and last, per Mitchell's 2026-08-06 ordering. "Luna" resolved to
     # GPT-5.6 Luna, the fast and cheap tier of OpenAI's GPT-5.6 family
@@ -98,56 +118,106 @@ CALIBRATED_ROUTES = {
         provider="codex_cli",
         model="gpt-5.6-luna",
         outcome="degraded",
+        account_type="subscription",
     ),
     ("anthropic", "claude-fable-5"): ProviderRoute(
         provider="anthropic",
         model="claude-fable-5",
         outcome="equivalent",
+        account_type="metered_api",
     ),
     ("anthropic", "claude-opus-4-8"): ProviderRoute(
         provider="anthropic",
         model="claude-opus-4-8",
         outcome="equivalent",
+        account_type="metered_api",
     ),
     ("openai", "gpt-5.6-sol"): ProviderRoute(
         provider="openai",
         model="gpt-5.6-sol",
         outcome="degraded",
+        account_type="metered_api",
+    ),
+    ("google", "gemini-3.1-pro"): ProviderRoute(
+        provider="google",
+        model="gemini-3.1-pro",
+        outcome="degraded",
+        account_type="metered_api",
+        requested_slot="google:gemini-3.1-pro",
+        resolved_model="gemini-3.1-pro-preview",
     ),
     ("google", "gemini-3.6-flash"): ProviderRoute(
         provider="google",
         model="gemini-3.6-flash",
         outcome="degraded",
+        account_type="metered_api",
+        requested_slot="google:gemini-3.6-flash",
+        resolved_model="gemini-3.6-flash",
+    ),
+    # Compatibility slots. Keep them callable for older configuration, but
+    # route the adapter to the current model and expose the distinction.
+    ("google", "gemini-2.5-pro"): ProviderRoute(
+        provider="google",
+        model="gemini-2.5-pro",
+        outcome="degraded",
+        account_type="metered_api",
+        requested_slot="google:gemini-2.5-pro",
+        resolved_model="gemini-3.1-pro-preview",
+        compatibility_label="COMPATIBILITY SLOT: current Gemini 3.1 Pro Preview",
+    ),
+    ("google", "gemini-3-flash"): ProviderRoute(
+        provider="google",
+        model="gemini-3-flash",
+        outcome="degraded",
+        account_type="metered_api",
+        requested_slot="google:gemini-3-flash",
+        resolved_model="gemini-3.6-flash",
+        compatibility_label="COMPATIBILITY SLOT: current stable Gemini 3.6 Flash",
+    ),
+    ("google", "gemini-2.5-flash"): ProviderRoute(
+        provider="google",
+        model="gemini-2.5-flash",
+        outcome="degraded",
+        account_type="metered_api",
+        requested_slot="google:gemini-2.5-flash",
+        resolved_model="gemini-3.6-flash",
+        compatibility_label="COMPATIBILITY SLOT: current stable Gemini 3.6 Flash",
     ),
     ("xai", "grok-4.5"): ProviderRoute(
         provider="xai",
         model="grok-4.5",
         outcome="degraded",
+        account_type="metered_api",
     ),
     ("openrouter", "openai/gpt-oss-120b"): ProviderRoute(
         provider="openrouter",
         model="openai/gpt-oss-120b",
         outcome="degraded",
+        account_type="metered_api",
     ),
     ("openrouter", "deepseek/deepseek-v4-flash"): ProviderRoute(
         provider="openrouter",
         model="deepseek/deepseek-v4-flash",
         outcome="degraded",
+        account_type="metered_api",
     ),
     ("openrouter", "qwen/qwen3-coder"): ProviderRoute(
         provider="openrouter",
         model="qwen/qwen3-coder",
         outcome="degraded",
+        account_type="metered_api",
     ),
     ("openrouter", "moonshotai/kimi-k2.6"): ProviderRoute(
         provider="openrouter",
         model="moonshotai/kimi-k2.6",
         outcome="degraded",
+        account_type="metered_api",
     ),
     ("openrouter", "minimax/minimax-m3"): ProviderRoute(
         provider="openrouter",
         model="minimax/minimax-m3",
         outcome="degraded",
+        account_type="metered_api",
     ),
 }
 
@@ -179,14 +249,45 @@ def _provider_error_kind(exc: Exception) -> tuple[str, bool]:
     if (
         status in {402, 429}
         or "usage limit" in signal
+        or "weekly limit" in signal
+        or "plan limit" in signal
         or "rate limit" in signal
         or "quota" in signal
     ):
         return "rate_quota", True
     if status == 408 or "timeout" in signal or "timed out" in signal:
         return "timeout", True
-    if status in {401, 403}:
-        return "credential", False
+    if status == 401 or any(
+        marker in signal
+        for marker in (
+            "authentication failed",
+            "not authenticated",
+            "invalid credential",
+            "invalid token",
+        )
+    ):
+        return "credential", True
+    if status == 403 or any(
+        marker in signal
+        for marker in (
+            "permission denied",
+            "not authorized",
+            "forbidden",
+        )
+    ):
+        return "authorization", False
+    # Command-line adapters have no HTTP status. An otherwise unclassified
+    # process exit or missing binary is an availability failure. Quota and
+    # timeout markers are classified above so their bounded reason stays exact.
+    if any(
+        marker in signal
+        for marker in (
+            "cli exited",
+            "cli wrapper not found",
+            "cli not found",
+        )
+    ):
+        return "unavailable", True
     # Anthropic reports exhausted prepaid credits as HTTP 400 rather than a
     # quota-shaped 402/429. Treat that specific billing response as retryable
     # so a configured fallback can carry the request. Generic 400s remain
@@ -225,6 +326,10 @@ class ProviderPolicyRouter:
                 route.outcome not in OUTCOMES
                 or route.provider != provider
                 or route.model != model
+                or (
+                    route.outcome != "hard_stop"
+                    and route.account_type not in ACCOUNT_TYPES
+                )
             ):
                 raise ValueError("invalid provider-policy registry entry")
 
@@ -237,6 +342,9 @@ class ProviderPolicyRouter:
             return {
                 "provider": provider,
                 "model": model,
+                "requested_slot": f"{provider}:{model}",
+                "resolved_model": None,
+                "account_type": None,
                 "outcome": "hard_stop",
                 "reason": "not_calibrated",
                 "calibrated": False,
@@ -247,6 +355,10 @@ class ProviderPolicyRouter:
         return {
             "provider": provider,
             "model": model,
+            "requested_slot": route.requested_slot or f"{provider}:{model}",
+            "resolved_model": route.resolved_model or model,
+            "account_type": route.account_type,
+            "compatibility_label": route.compatibility_label,
             "outcome": route.outcome,
             "reason": reason,
             "calibrated": True,
@@ -301,11 +413,17 @@ class ProviderPolicyRouter:
                 f"provider route {provider}:{model} has no adapter"
             )
 
+        route = self.registry[(provider, model)]
+        requested_slot = route.requested_slot or f"{provider}:{model}"
+        resolved_model = route.resolved_model or model
         try:
             text = adapter(
                 {
                     "provider": provider,
-                    "model": model,
+                    "model": resolved_model,
+                    "requested_slot": requested_slot,
+                    "resolved_model": resolved_model,
+                    "account_type": route.account_type,
                     "system": system,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
@@ -327,7 +445,6 @@ class ProviderPolicyRouter:
                 kind="malformed_response",
                 retryable=True,
             )
-        route = self.registry[(provider, model)]
         return CompletionResult(text=text.strip(), route=route)
 
     def route_candidates(
@@ -342,6 +459,7 @@ class ProviderPolicyRouter:
     ) -> CompletionResult:
         last_error: ProviderPolicyHardStop | None = None
         fallback_reason: str | None = None
+        failure_ledger: list[dict] = []
         for provider, model in candidates:
             try:
                 result = self.route(
@@ -359,12 +477,26 @@ class ProviderPolicyRouter:
                     text=result.text,
                     route=result.route,
                     fallback_reason=fallback_reason,
+                    failure_ledger=tuple(failure_ledger),
                 )
             except ProviderPolicyHardStop as exc:
                 last_error = exc
                 if not exc.retryable:
                     raise
                 fallback_reason = f"provider_{exc.kind}"
+                plan = self.explain(provider=provider, model=model)
+                failure_ledger.append(
+                    {
+                        "requested_slot": plan["requested_slot"],
+                        "provider": provider,
+                        "resolved_model": plan["resolved_model"],
+                        "account_type": plan["account_type"],
+                        "reason": fallback_reason,
+                        "retryable": True,
+                    }
+                )
+                if len(failure_ledger) > FAILURE_LEDGER_MAX:
+                    failure_ledger = failure_ledger[-FAILURE_LEDGER_MAX:]
         if last_error is not None:
             raise last_error
         raise ProviderPolicyHardStop("provider_no_candidates", kind="policy")
