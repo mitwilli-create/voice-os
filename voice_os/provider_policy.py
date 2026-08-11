@@ -405,7 +405,9 @@ class ProviderPolicyRouter:
             )
         if not plan["credential_present"]:
             raise ProviderPolicyHardStop(
-                f"provider route {provider}:{model} has no credentials"
+                f"provider route {provider}:{model} has no credentials",
+                kind="credential",
+                retryable=True,
             )
         adapter = self.adapters.get(provider)
         if adapter is None:

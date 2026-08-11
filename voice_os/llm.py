@@ -104,12 +104,16 @@ def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
     """
     if os.environ.get("VOICE_OS_OFFLINE"):
         return None
+    from .provider_policy import ProviderPolicyHardStop
+
     try:
         return _route_live_completion(
             system=system,
             prompt=prompt,
             max_tokens=max_tokens,
         )
+    except ProviderPolicyHardStop:
+        raise
     except Exception as exc:
         _warn_once(f"live persona call failed ({type(exc).__name__}: {exc})")
         return None
