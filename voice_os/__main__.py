@@ -15,8 +15,8 @@ import sys
 # `unsupported operand type(s) for |` TypeError on Python < 3.10. Fail
 # fast here with an actionable message instead. A common trap: a shell
 # where `python3` resolves to system Python 3.9 (e.g. non-interactive
-# shells without the pyenv shim on PATH) while the project default is
-# the project contract is `python3` — ensure that command points to Python 3.14.
+# shells without the pyenv shim on PATH); the project contract is
+# `python3`, so ensure that command points to Python 3.10+.
 if sys.version_info < (3, 10):
     _v = ".".join(str(n) for n in sys.version_info[:3])
     sys.stderr.write(

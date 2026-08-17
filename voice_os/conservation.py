@@ -222,7 +222,7 @@ for _word, _digit in _WORD_TO_DIGIT.items():
     _DIGIT_TO_WORD.setdefault(_digit, _word)
 
 # Hedges that adjudicate a number's precision. Position: immediately
-# before the numeral ("roughly fifty" — the hedge WAS the fact).
+# before the numeral ("roughly fifty": the hedge WAS the fact).
 _NUMERAL_HEDGES = frozenset(
     """
     roughly about around approximately nearly almost some over under
@@ -248,7 +248,7 @@ def dropped_modifiers(input_text: str, output_text: str) -> list[dict]:
 
     Two detectors:
     - numeral windows: a precision hedge within two tokens before a
-      numeral ("roughly fifty" — the hedge was the adjudicated fact) and
+      numeral ("roughly fifty": the hedge was the adjudicated fact) and
       the modifier position directly after it ("four-month electrical
       blackout") must survive the rewrite while the numeral does;
     - framing labels: fixed phrases that label how a fact was sourced or
