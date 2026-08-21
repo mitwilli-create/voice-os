@@ -112,8 +112,11 @@ def complete(system: str, prompt: str, max_tokens: int = 2000) -> str | None:
             prompt=prompt,
             max_tokens=max_tokens,
         )
-    except ProviderPolicyHardStop:
-        raise
+    except ProviderPolicyHardStop as exc:
+        if not exc.retryable:
+            raise
+        _warn_once(f"live persona call failed ({type(exc).__name__}: {exc})")
+        return None
     except Exception as exc:
         _warn_once(f"live persona call failed ({type(exc).__name__}: {exc})")
         return None

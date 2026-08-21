@@ -44,6 +44,27 @@ def test_complete_reraises_provider_policy_hard_stop(monkeypatch):
     assert str(exc_info.value) == "provider_policy_denied"
 
 
+def test_complete_returns_none_for_retryable_credential_hard_stop(monkeypatch, capsys):
+    monkeypatch.delenv("VOICE_OS_OFFLINE", raising=False)
+    monkeypatch.setattr(llm, "_warned", False)
+
+    def raise_retryable_credential_hard_stop(**_kwargs):
+        raise ProviderPolicyHardStop(
+            "provider_credential_missing",
+            kind="credential",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(
+        llm,
+        "_route_live_completion",
+        raise_retryable_credential_hard_stop,
+    )
+
+    assert llm.complete("system", "synthetic draft") is None
+    assert "provider_credential_missing" in capsys.readouterr().err
+
+
 def test_default_openweight_route_is_available_for_toil():
     calls = []
     router = ProviderPolicyRouter(
