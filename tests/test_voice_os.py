@@ -97,42 +97,42 @@ class TestEmDashScrub(unittest.TestCase):
         # The scrub rewrites (comma/marker/drop), never glyph-swaps to a
         # spaced hyphen (2026-07-08 field report, class 4b).
         self.assertEqual(
-            scrub_em_dashes("boldness — a note"), "boldness, a note"
+            scrub_em_dashes("boldness \u2014 a note"), "boldness, a note"
         )
-        self.assertEqual(scrub_em_dashes("word—word"), "word, word")
-        self.assertEqual(scrub_em_dashes("a——b"), "a, b")
+        self.assertEqual(scrub_em_dashes("word\u2014word"), "word, word")
+        self.assertEqual(scrub_em_dashes("a\u2014\u2014b"), "a, b")
         # Paired parenthetical dashes become a comma pair.
         self.assertEqual(
-            scrub_em_dashes("the fix — one line — shipped"),
+            scrub_em_dashes("the fix \u2014 one line \u2014 shipped"),
             "the fix, one line, shipped",
         )
         # A run between digits is a range: unspaced hyphen.
-        self.assertEqual(scrub_em_dashes("pages 3—5"), "pages 3-5")
+        self.assertEqual(scrub_em_dashes("pages 3\u20145"), "pages 3-5")
         # Dash opening a line stays flush; dangling dash is dropped.
-        self.assertEqual(scrub_em_dashes("—item one\n"), "- item one\n")
-        self.assertEqual(scrub_em_dashes("trailing—\nnext"), "trailing\nnext")
+        self.assertEqual(scrub_em_dashes("\u2014item one\n"), "- item one\n")
+        self.assertEqual(scrub_em_dashes("trailing\u2014\nnext"), "trailing\nnext")
         # Newlines around a dash are preserved as line structure.
-        self.assertNotIn("—", scrub_em_dashes("a—\n—b"))
+        self.assertNotIn("\u2014", scrub_em_dashes("a\u2014\n\u2014b"))
         # A dash running into punctuation is dropped, never left as a
         # space before the mark.
-        self.assertEqual(scrub_em_dashes("word—."), "word.")
-        self.assertEqual(scrub_em_dashes("wait—, no"), "wait, no")
+        self.assertEqual(scrub_em_dashes("word\u2014."), "word.")
+        self.assertEqual(scrub_em_dashes("wait\u2014, no"), "wait, no")
         # After pause punctuation the comma would stack; space instead.
-        self.assertEqual(scrub_em_dashes("note: — right"), "note: right")
+        self.assertEqual(scrub_em_dashes("note: \u2014 right"), "note: right")
 
     def test_scrub_never_emits_a_spaced_hyphen(self):
         # " - " is still a dash-shaped tell; the convention is comma,
         # colon, period, parens, or restructure.
         cases = [
-            "boldness — a note",
-            "word—word",
-            "a — b — c",
-            "mid — sentence — pair and — single",
-            "quote — 'inner' — end.",
+            "boldness \u2014 a note",
+            "word\u2014word",
+            "a \u2014 b \u2014 c",
+            "mid \u2014 sentence \u2014 pair and \u2014 single",
+            "quote \u2014 'inner' \u2014 end.",
         ]
         for case in cases:
             self.assertNotIn(" - ", scrub_em_dashes(case), case)
-            self.assertNotIn("—", scrub_em_dashes(case), case)
+            self.assertNotIn("\u2014", scrub_em_dashes(case), case)
 
     def test_pass_through_draft_is_scrubbed_at_the_boundary(self):
         # An already-in-voice draft can pass the gate at cycle 0 with no
@@ -140,12 +140,12 @@ class TestEmDashScrub(unittest.TestCase):
         from voice_os import run_cycles
 
         baseline = load_corpus(CORPUS)
-        dashed = DRAFT_GOOD.replace(", and", " — and", 1)
-        self.assertIn("—", dashed)
+        dashed = DRAFT_GOOD.replace(", and", " \u2014 and", 1)
+        self.assertIn("\u2014", dashed)
         cycles, result, text, modes = run_cycles(
             baseline, dict(baseline.mean), dashed, [], max_cycles=2
         )
-        self.assertNotIn("—", text)
+        self.assertNotIn("\u2014", text)
 
     def test_scrub_untouched_text_is_identity(self):
         clean = "No dashes here - just a hyphen, a colon: and prose.\n"
@@ -158,13 +158,13 @@ class TestEmDashScrub(unittest.TestCase):
 
         with mock.patch(
             "voice_os.llm.complete",
-            return_value="Bold move — and the right one—clearly.",
+            return_value="Bold move \u2014 and the right one\u2014clearly.",
         ):
             result = GenerativePersona().revise(
                 "draft", {axis: 0.5 for axis in AXES}, [], []
             )
         self.assertEqual(result.mode, "live")
-        self.assertNotIn("—", result.text)
+        self.assertNotIn("\u2014", result.text)
         self.assertEqual(
             result.text, "Bold move, and the right one, clearly."
         )
@@ -173,12 +173,12 @@ class TestEmDashScrub(unittest.TestCase):
         from voice_os.personas import GenerativePersona
 
         result = GenerativePersona()._offline_revise(
-            "The plan — such as it is — holds.",
+            "The plan \u2014 such as it is \u2014 holds.",
             {axis: 0.5 for axis in AXES},
             [],
         )
         self.assertEqual(result.mode, "offline")
-        self.assertNotIn("—", result.text)
+        self.assertNotIn("\u2014", result.text)
 
 
 class TestProfileBlockStability(unittest.TestCase):

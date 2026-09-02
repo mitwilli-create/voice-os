@@ -126,7 +126,7 @@ def main():
     empties = [r["heading"] for r in results if r["mode"] not in ("skip",) and not r["voiced"]]
     not_live = [r["heading"] for r in results if r["mode"] not in ("live", "skip")]
     banned = [r["heading"] for r in results if r.get("banned")]
-    em_dash = "—" in final
+    em_dash = "\u2014" in final
 
     guard_failures = []
     if retention < a.min_retention:
