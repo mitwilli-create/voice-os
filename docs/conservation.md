@@ -27,12 +27,12 @@ was damaged, which was always a defect.
 
 | Check | Receipt it closes | Blocking |
 |---|---|---|
-| `unsupported_sentences` — lexical claims diff: an output sentence is flagged when fewer than half its content words trace to the input (stem or 6-char-prefix match; sentences under 3 content words are cadence, not claims) | builder-turn's four invented opinions; stream-launch-night's fabricated closer | redraft mode only |
-| `quote_violations` — input text inside double quotes must survive verbatim, marks included (curly/straight glyphs normalized) | mong-kok pull returned unquoted | always |
-| `dropped_modifiers` — precision hedges within two tokens before a numeral ("roughly fifty"), the modifier slot directly after it ("four-month **electrical** blackout"), framing labels ("on air", "design targets", "internal figure") | hurricane-maria, builder-turn, jazz-jennings qualifier drops | advisory + revision signal |
-| `format_flags` — markdown lists/headings introduced into prose input | trans-navy-panel bullet leak | advisory + revision signal |
-| `diction_flags` — charged terms in the output the input never used | "pursuing its critics" → "hunting its critics" | advisory + revision signal |
-| `diction_escalations` — a `diction_flags` term sharing a sentence with a heuristic named entity (stdlib sentence-case NER: mid-sentence capitalized runs, acronyms, and sentence-initial names anchored elsewhere in the text; no model, so lowercase particles like "bin" split a name) | the same receipt, which mattered precisely because Scientology was in range | advisory + stronger revision signal naming the party |
+| `unsupported_sentences` (lexical claims diff: an output sentence is flagged when fewer than half its content words trace to the input; stem or 6-char-prefix match; sentences under 3 content words are cadence, not claims) | builder-turn's four invented opinions; stream-launch-night's fabricated closer | redraft mode only |
+| `quote_violations` (input text inside double quotes must survive verbatim, marks included; curly/straight glyphs normalized) | mong-kok pull returned unquoted | always |
+| `dropped_modifiers` (precision hedges within two tokens before a numeral ("roughly fifty"), the modifier slot directly after it ("four-month **electrical** blackout"), framing labels ("on air", "design targets", "internal figure")) | hurricane-maria, builder-turn, jazz-jennings qualifier drops | advisory + revision signal |
+| `format_flags` (markdown lists/headings introduced into prose input) | trans-navy-panel bullet leak | advisory + revision signal |
+| `diction_flags` (charged terms in the output the input never used) | "pursuing its critics" → "hunting its critics" | advisory + revision signal |
+| `diction_escalations` (a `diction_flags` term sharing a sentence with a heuristic named entity: stdlib sentence-case NER, mid-sentence capitalized runs, acronyms, and sentence-initial names anchored elsewhere in the text; no model, so lowercase particles like "bin" split a name) | the same receipt, which mattered precisely because Scientology was in range | advisory + stronger revision signal naming the party |
 
 Calibration: against the site pass's 17 original/human-approved body
 pairs the full check set produces zero false flags, while every

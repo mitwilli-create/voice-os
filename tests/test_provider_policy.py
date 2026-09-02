@@ -30,6 +30,41 @@ def test_offline_privacy_override_skips_router(monkeypatch):
     assert calls == []
 
 
+def test_complete_reraises_provider_policy_hard_stop(monkeypatch):
+    monkeypatch.delenv("VOICE_OS_OFFLINE", raising=False)
+
+    def raise_provider_policy_hard_stop(**_kwargs):
+        raise ProviderPolicyHardStop("provider_policy_denied", kind="policy")
+
+    monkeypatch.setattr(llm, "_route_live_completion", raise_provider_policy_hard_stop)
+
+    with pytest.raises(ProviderPolicyHardStop) as exc_info:
+        llm.complete("system", "synthetic draft")
+
+    assert str(exc_info.value) == "provider_policy_denied"
+
+
+def test_complete_returns_none_for_retryable_credential_hard_stop(monkeypatch, capsys):
+    monkeypatch.delenv("VOICE_OS_OFFLINE", raising=False)
+    monkeypatch.setattr(llm, "_warned", False)
+
+    def raise_retryable_credential_hard_stop(**_kwargs):
+        raise ProviderPolicyHardStop(
+            "provider_credential_missing",
+            kind="credential",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(
+        llm,
+        "_route_live_completion",
+        raise_retryable_credential_hard_stop,
+    )
+
+    assert llm.complete("system", "synthetic draft") is None
+    assert "provider_credential_missing" in capsys.readouterr().err
+
+
 def test_default_openweight_route_is_available_for_toil():
     calls = []
     router = ProviderPolicyRouter(
@@ -713,6 +748,47 @@ def test_credential_failure_advances_with_an_exact_bounded_reason(failure):
     assert result.fallback_reason == "provider_credential"
     assert result.failure_ledger[0]["reason"] == "provider_credential"
     assert calls == ["fable", "opus"]
+
+
+def test_missing_credential_advances_without_calling_that_provider():
+    calls = []
+
+    def claude(_request):
+        calls.append("claude")
+        return "MUST_NOT_RUN"
+
+    def codex(_request):
+        calls.append("codex")
+        return "CANARY_OK"
+
+    router = ProviderPolicyRouter(
+        adapters={"claude_cli": claude, "codex_cli": codex},
+        env={"CODEX_OAUTH_TOKEN": "present"},
+    )
+
+    result = router.route_candidates(
+        candidates=[
+            ("claude_cli", "fable"),
+            ("codex_cli", "gpt-5.6-sol"),
+        ],
+        system="system",
+        prompt="draft",
+        max_tokens=100,
+        allow_degraded=True,
+        allowed_providers={"claude_cli", "codex_cli"},
+    )
+
+    assert result.text == "CANARY_OK"
+    assert calls == ["codex"]
+    assert result.fallback_reason == "provider_credential"
+    assert result.failure_ledger[0] == {
+        "requested_slot": "claude_cli:fable",
+        "provider": "claude_cli",
+        "resolved_model": "fable",
+        "account_type": "subscription",
+        "reason": "provider_credential",
+        "retryable": True,
+    }
 
 
 def test_authorization_failure_hard_stops_without_calling_a_fallback():

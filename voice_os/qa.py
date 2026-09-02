@@ -63,23 +63,23 @@ def scrub_em_dashes(text: str) -> str:
     - a run between digits is a range and becomes an unspaced hyphen;
     - a run opening a line is a list/dialogue marker and becomes "- ";
     - a run running straight into closing punctuation was decorative
-      and is dropped ("word—." -> "word.");
+      and is dropped ("word\u2014." -> "word.");
     - a run dangling at a line end is dropped;
     - every other run is a spoken-register pause and becomes a comma
       (paired parenthetical dashes therefore become a comma pair).
 
     Newlines are never touched.
     """
-    if "—" not in text:
+    if "\u2014" not in text:
         return text
-    scrubbed = re.sub(r"(?<=\d)—+(?=\d)", "-", text)
-    scrubbed = re.sub(r"(?m)^[ \t]*—+[ \t]*", "- ", scrubbed)
-    scrubbed = re.sub(r"[ \t]*—+[ \t]*(?=[,.;:!?)])", "", scrubbed)
-    scrubbed = re.sub(r"(?m)[ \t]*—+[ \t]*$", "", scrubbed)
+    scrubbed = re.sub(r"(?<=\d)\u2014+(?=\d)", "-", text)
+    scrubbed = re.sub(r"(?m)^[ \t]*\u2014+[ \t]*", "- ", scrubbed)
+    scrubbed = re.sub(r"[ \t]*\u2014+[ \t]*(?=[,.;:!?)])", "", scrubbed)
+    scrubbed = re.sub(r"(?m)[ \t]*\u2014+[ \t]*$", "", scrubbed)
     # After an opener or existing pause punctuation a comma would stack
     # ("(, word", ":, word"); the mark already carries the pause.
-    scrubbed = re.sub(r"(?<=[,;:(\[])[ \t]*—+[ \t]*", " ", scrubbed)
-    scrubbed = re.sub(r"[ \t]*—+[ \t]*", ", ", scrubbed)
+    scrubbed = re.sub(r"(?<=[,;:(\[])[ \t]*\u2014+[ \t]*", " ", scrubbed)
+    scrubbed = re.sub(r"[ \t]*\u2014+[ \t]*", ", ", scrubbed)
     return scrubbed
 
 
